@@ -418,6 +418,10 @@ impl PortScanner for UnixPortScanner {
 }
 
 pub fn parse_lsof(output: &str) -> Result<Vec<PortInfo>, PortError> {
+    // lsof -i -P -n output columns:
+    //   0:COMMAND 1:PID 2:USER 3:FD 4:TYPE 5:DEVICE 6:SIZE/OFF 7:NODE 8:NAME 9:(STATE)
+    //   - TYPE (col 4) is the address family: IPv4 / IPv6
+    //   - NODE (col 7) is the transport protocol: TCP / UDP
     let mut out = Vec::new();
     let mut lines = output.lines();
     let _ = lines.next(); // skip header
@@ -431,23 +435,24 @@ pub fn parse_lsof(output: &str) -> Result<Vec<PortInfo>, PortError> {
             Ok(p) => p,
             Err(_) => continue,
         };
-        let type_col = cols[3];
-        let protocol = match type_col {
-            "IPv4" | "IPv6" => Protocol::Tcp,
+        // Transport protocol lives in NODE column (index 7), not TYPE (index 4)
+        let protocol = match cols[7] {
+            "TCP" => Protocol::Tcp,
+            "UDP" => Protocol::Udp,
             _ => continue,
         };
-        let name = cols[cols.len() - 1];
-        let (port_str, state) = if let Some(paren_start) = name.find('(') {
-            let (n, s) = name.split_at(paren_start);
-            (n.trim_end_matches(':'), s.trim_matches(|c| c == '(' || c == ')').to_string())
+        // NAME column is index 8: address:port (e.g., "*:8080" or "10.0.0.1:22->1.2.3.4:54321")
+        let name = cols[8];
+        // State, if present, is index 9 wrapped in parens (e.g., "(LISTEN)")
+        let state = if cols.len() > 9 {
+            cols[9].trim_matches(|c| c == '(' || c == ')').to_string()
         } else {
-            (name.trim_end_matches(':'), String::new())
+            String::new()
         };
-        let port: u16 = match port_str.rsplit(':').next() {
-            Some(p) => match p.parse() {
-                Ok(p) => p,
-                Err(_) => continue,
-            },
+        // For ESTABLISHED lines, name is "local:port->remote:port"; take local port (before ->)
+        let address = name.split("->").next().unwrap_or(name);
+        let port: u16 = match address.rsplit(':').next().and_then(|p| p.parse().ok()) {
+            Some(p) => p,
             None => continue,
         };
         out.push(PortInfo {
