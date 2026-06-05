@@ -1,4 +1,5 @@
 use super::port_scanner::{PortError, PortInfo, PortScanner, Protocol};
+use std::collections::HashSet;
 use std::process::Command;
 
 pub struct UnixPortScanner;
@@ -42,6 +43,7 @@ pub fn parse_lsof(output: &str) -> Result<Vec<PortInfo>, PortError> {
     //   - TYPE (col 4) is the address family: IPv4 / IPv6
     //   - NODE (col 7) is the transport protocol: TCP / UDP
     let mut out = Vec::new();
+    let mut seen: HashSet<(Protocol, u16, u32, String)> = HashSet::new();
     let mut lines = output.lines();
     let _ = lines.next(); // skip header
     for line in lines {
@@ -74,6 +76,9 @@ pub fn parse_lsof(output: &str) -> Result<Vec<PortInfo>, PortError> {
             Some(p) => p,
             None => continue,
         };
+        if !seen.insert((protocol, port, pid, state.clone())) {
+            continue;
+        }
         out.push(PortInfo {
             protocol,
             port,
@@ -132,5 +137,18 @@ node       42     user   22u  IPv4   0x2        0t0  TCP *:4000 (LISTEN)
     fn parse_empty() {
         let ports = parse_lsof("").unwrap();
         assert_eq!(ports.len(), 0);
+    }
+
+    #[test]
+    fn parse_dedupes_same_proto_port_pid_state() {
+        let input = "\
+COMMAND     PID   USER   FD   TYPE   DEVICE SIZE/OFF NODE NAME
+node      1234   user   22u  IPv4   0x1        0t0  TCP *:8080 (LISTEN)
+node      1234   user   23u  IPv6   0x2        0t0  TCP *:8080 (LISTEN)
+";
+        let ports = parse_lsof(input).unwrap();
+        assert_eq!(ports.len(), 1);
+        assert_eq!(ports[0].port, 8080);
+        assert_eq!(ports[0].pid, 1234);
     }
 }

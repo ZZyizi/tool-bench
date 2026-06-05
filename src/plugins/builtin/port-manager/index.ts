@@ -8,7 +8,7 @@ const manifest: PluginManifest = {
   description: '查看和释放系统占用的端口',
   author: 'DevToolkit Team',
   category: 'Network',
-  icon: '🔌',
+  icon: '',
   entry: './index.ts',
   capabilities: ['network:read', 'process:read', 'process:kill'],
 };

@@ -1,4 +1,5 @@
 use super::port_scanner::{PortError, PortInfo, PortScanner, Protocol};
+use std::collections::HashSet;
 use std::process::Command;
 
 pub struct WindowsPortScanner;
@@ -36,6 +37,7 @@ impl PortScanner for WindowsPortScanner {
 
 pub fn parse_netstat(output: &str) -> Result<Vec<PortInfo>, PortError> {
     let mut out = Vec::new();
+    let mut seen: HashSet<(Protocol, u16, u32, String)> = HashSet::new();
     for line in output.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with("Active") || line.starts_with("Proto") {
@@ -67,6 +69,9 @@ pub fn parse_netstat(output: &str) -> Result<Vec<PortInfo>, PortError> {
             Some(p) => p,
             None => continue,
         };
+        if !seen.insert((protocol, port, pid, state.clone())) {
+            continue;
+        }
         out.push(PortInfo {
             protocol,
             port,
@@ -130,5 +135,17 @@ Active Connections
     fn parse_empty() {
         let ports = parse_netstat("").unwrap();
         assert_eq!(ports.len(), 0);
+    }
+
+    #[test]
+    fn parse_dedupes_same_proto_port_pid_state() {
+        let input = "\
+  TCP    0.0.0.0:8080       0.0.0.0:0              LISTENING       1234
+  TCP    [::]:8080          [::]:0                 LISTENING       1234
+";
+        let ports = parse_netstat(input).unwrap();
+        assert_eq!(ports.len(), 1);
+        assert_eq!(ports[0].port, 8080);
+        assert_eq!(ports[0].pid, 1234);
     }
 }
