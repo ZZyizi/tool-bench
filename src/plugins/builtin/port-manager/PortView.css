@@ -14,6 +14,32 @@
   gap: 12px;
 }
 
+.port-view__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.port-view__search {
+  width: 240px;
+  padding: 6px 10px;
+  background: var(--bg-elevated);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.port-view__search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.port-view__search::placeholder {
+  color: var(--fg-muted);
+}
+
 .port-view__title {
   font-size: 18px;
   font-weight: 600;

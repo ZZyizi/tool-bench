@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../../api';
 import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import type { PortInfo } from '../../../types';
@@ -11,6 +11,28 @@ export function PortView() {
   const [selected, setSelected] = useState<PortInfo | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [actionMessage, setActionMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+  const [query, setQuery] = useState('');
+
+  const filteredPorts = useMemo(() => {
+    const q = query.trim();
+    if (!q) return ports;
+    const portQuery = /^\d+$/.test(q) ? parseInt(q, 10) : null;
+    const lower = q.toLowerCase();
+    return ports.filter((p) => {
+      if (portQuery !== null && p.port === portQuery) return true;
+      if (p.process_name && p.process_name.toLowerCase().includes(lower)) return true;
+      return false;
+    });
+  }, [ports, query]);
+
+  useEffect(() => {
+    if (
+      selected &&
+      !filteredPorts.some((p) => p.port === selected.port && p.pid === selected.pid)
+    ) {
+      setSelected(null);
+    }
+  }, [filteredPorts, selected]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -51,9 +73,18 @@ export function PortView() {
     <div className="port-view">
       <div className="port-view__header">
         <h2 className="port-view__title">端口占用列表</h2>
-        <button className="port-view__refresh" onClick={refresh} disabled={loading}>
-          {loading ? '刷新中…' : '刷新'}
-        </button>
+        <div className="port-view__header-actions">
+          <input
+            className="port-view__search"
+            type="text"
+            placeholder="搜索端口号或进程名"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <button className="port-view__refresh" onClick={refresh} disabled={loading}>
+            {loading ? '刷新中…' : '刷新'}
+          </button>
+        </div>
       </div>
 
       {error && <div className="port-view__error">加载失败: {error}</div>}
@@ -64,8 +95,10 @@ export function PortView() {
       )}
 
       <div className="port-view__table">
-        {ports.length === 0 && !loading && !error ? (
-          <div className="port-view__empty">没有检测到端口占用</div>
+        {filteredPorts.length === 0 && !loading && !error ? (
+          <div className="port-view__empty">
+            {ports.length === 0 ? '没有检测到端口占用' : `没有匹配 "${query}" 的端口`}
+          </div>
         ) : (
           <table>
             <thead>
@@ -78,7 +111,7 @@ export function PortView() {
               </tr>
             </thead>
             <tbody>
-              {ports.map((p) => {
+              {filteredPorts.map((p) => {
                 const isSelected = selected?.port === p.port && selected?.pid === p.pid;
                 return (
                   <tr
