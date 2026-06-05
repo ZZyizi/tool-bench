@@ -125,6 +125,12 @@
   color: var(--fg-muted);
 }
 
+.port-view__hidden {
+  color: var(--fg-muted);
+  font-style: italic;
+  font-size: 12px;
+}
+
 .port-view__kill {
   padding: 6px 16px;
   background: var(--danger);

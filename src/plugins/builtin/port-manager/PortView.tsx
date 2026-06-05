@@ -12,18 +12,20 @@ export function PortView() {
   const [confirming, setConfirming] = useState(false);
   const [actionMessage, setActionMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
   const [query, setQuery] = useState('');
+  const [hiddenSystemCount, setHiddenSystemCount] = useState(0);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const list = await api.listPorts(query);
-      setPorts(list);
+      const data = await api.listPorts(query);
+      setPorts(data.ports);
+      setHiddenSystemCount(data.hidden_system);
       // Backend now does the filtering; if the active selection falls out
       // of the result set, clear it so the footer doesn't claim a row the
       // user can't see.
       setSelected((prev) =>
-        prev && !list.some((p) => p.port === prev.port && p.pid === prev.pid) ? null : prev,
+        prev && !data.ports.some((p) => p.port === prev.port && p.pid === prev.pid) ? null : prev,
       );
     } catch (e) {
       setError(String(e));
@@ -125,6 +127,9 @@ export function PortView() {
             ? `已选: ${selected.protocol.toUpperCase()} ${selected.port} (PID ${selected.pid})`
             : '点击行选择端口'}
         </span>
+        {hiddenSystemCount > 0 && (
+          <span className="port-view__hidden">已隐藏 {hiddenSystemCount} 个系统进程</span>
+        )}
         <button
           className="port-view__kill"
           disabled={!selected}

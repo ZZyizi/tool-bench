@@ -22,3 +22,8 @@ export interface Capabilities {
   dns: boolean;
   file_read: boolean;
 }
+
+export interface FilteredPorts {
+  ports: PortInfo[];
+  hidden_system: number;
+}

@@ -4,12 +4,55 @@ use tauri::State;
 
 use crate::AppState;
 
+const SYSTEM_PROCESS_NAMES: &[&str] = &[
+    // Windows
+    "system", "svchost.exe", "lsass.exe", "csrss.exe", "services.exe",
+    "wininit.exe", "winlogon.exe", "smss.exe",
+    // Unix
+    "init", "systemd", "kthreadd", "ksoftirqd", "migration",
+    "rcu_sched", "watchdog", "launchd",
+];
+
 #[derive(Serialize)]
 pub struct KillResult {
     pub success: bool,
     pub pid: u32,
     pub port: u16,
     pub message: String,
+}
+
+#[derive(Serialize)]
+pub struct FilteredPorts {
+    pub ports: Vec<PortInfo>,
+    pub hidden_system: usize,
+}
+
+fn is_system_process(p: &PortInfo) -> bool {
+    // PIDs 0..100 cover the well-known kernel/system range on both platforms
+    // (Windows: System, CSRSS, LSASS, services; Unix: init/systemd, kthreads).
+    if p.pid < 100 {
+        return true;
+    }
+    if let Some(name) = &p.process_name {
+        let lower = name.to_lowercase();
+        if SYSTEM_PROCESS_NAMES.iter().any(|s| lower == *s) {
+            return true;
+        }
+    }
+    false
+}
+
+fn hide_system(ports: Vec<PortInfo>) -> (Vec<PortInfo>, usize) {
+    let mut visible = Vec::with_capacity(ports.len());
+    let mut hidden = 0usize;
+    for p in ports {
+        if is_system_process(&p) {
+            hidden += 1;
+        } else {
+            visible.push(p);
+        }
+    }
+    (visible, hidden)
 }
 
 fn filter_ports(ports: Vec<PortInfo>, query: &str) -> Vec<PortInfo> {
@@ -37,16 +80,20 @@ fn filter_ports(ports: Vec<PortInfo>, query: &str) -> Vec<PortInfo> {
 }
 
 #[tauri::command]
-pub fn list_ports(query: String, state: State<'_, AppState>) -> Result<Vec<PortInfo>, String> {
-    let ports = state.scanner.list().map_err(|e| e.to_string())?;
-    Ok(filter_ports(ports, &query))
+pub fn list_ports(query: String, state: State<'_, AppState>) -> Result<FilteredPorts, String> {
+    let raw = state.scanner.list().map_err(|e| e.to_string())?;
+    let after_query = filter_ports(raw, &query);
+    let (ports, hidden_system) = hide_system(after_query);
+    Ok(FilteredPorts { ports, hidden_system })
 }
 
 #[tauri::command]
 pub fn kill_port(port: u16, state: State<'_, AppState>) -> Result<KillResult, String> {
-    // Intentionally re-list without the search filter: a user may have narrowed
-    // the view, but kill should target the actual port regardless of the active
-    // query.
+    // Intentionally re-list without the search filter and without hiding system
+    // processes: a user may have narrowed the view, but kill should target the
+    // actual port regardless of the active query. (System processes typically
+    // refuse kill with PermissionDenied — that surfaces as a failed KillResult
+    // in the UI.)
     let ports = state
         .scanner
         .list()
@@ -116,7 +163,6 @@ mod tests {
 
     #[test]
     fn single_digit_does_not_match_prefix() {
-        // "8" must NOT match 80, 8080, 8000 — those are different ports.
         let ports = vec![
             make_port(80, 1, None),
             make_port(8080, 2, None),
@@ -140,11 +186,49 @@ mod tests {
 
     #[test]
     fn text_query_skips_entries_with_no_process_name() {
-        let ports = vec![
-            make_port(80, 1, None),
-            make_port(8080, 2, Some("node")),
-        ];
+        let ports = vec![make_port(80, 1, None), make_port(8080, 2, Some("node"))];
         let r = filter_ports(ports, "python");
         assert_eq!(r.len(), 0);
+    }
+
+    #[test]
+    fn is_system_process_below_pid_100() {
+        assert!(is_system_process(&make_port(80, 4, None)));
+        assert!(is_system_process(&make_port(80, 1, Some("init"))));
+        assert!(!is_system_process(&make_port(80, 1234, Some("nginx"))));
+    }
+
+    #[test]
+    fn is_system_process_by_known_name() {
+        assert!(is_system_process(&make_port(80, 500, Some("svchost.exe"))));
+        assert!(is_system_process(&make_port(80, 500, Some("System"))));
+        assert!(is_system_process(&make_port(80, 500, Some("systemd"))));
+        assert!(!is_system_process(&make_port(80, 500, Some("node"))));
+    }
+
+    #[test]
+    fn is_system_process_does_not_match_substring() {
+        // "myinit" must NOT be treated as system "init" — exact match only.
+        assert!(!is_system_process(&make_port(80, 500, Some("myinit"))));
+        assert!(!is_system_process(&make_port(80, 500, Some("customsystemd"))));
+    }
+
+    #[test]
+    fn is_system_process_with_none_name_and_high_pid() {
+        assert!(!is_system_process(&make_port(80, 500, None)));
+    }
+
+    #[test]
+    fn hide_system_partitions_list() {
+        let ports = vec![
+            make_port(80, 4, None),                       // hidden: PID < 100
+            make_port(443, 500, Some("svchost.exe")),     // hidden: name
+            make_port(8080, 1234, Some("nginx")),         // visible
+            make_port(9000, 42, Some("anything")),        // hidden: PID < 100
+        ];
+        let (visible, hidden) = hide_system(ports);
+        assert_eq!(visible.len(), 1);
+        assert_eq!(visible[0].port, 8080);
+        assert_eq!(hidden, 3);
     }
 }
