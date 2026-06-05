@@ -1,7 +1,13 @@
 # DevToolkit V0.1 MVP 设计规格
 
 **日期**: 2026-06-05（v2 - 加入插件系统）
-**项目**: DevToolkit (轻量级开发者桌面工具箱)
+**项目**: DevToolkit (轻量级开发者桌面工具箱) — 工程目录 `d:\project\tool-bench`
+**包命名**:
+- npm package: `tool-bench`
+- Rust crate: `toolBench`
+- Rust lib: `tool_bench_lib`
+- Tauri identifier: `com.toolBench.app`
+- 产品显示名: `toolBench`
 **里程碑**: v0.1.0 (P0 MVP)
 
 ---
@@ -351,7 +357,7 @@ thiserror = "2"
 - 搜索过滤
 
 ### V0.3 - 动态插件加载
-- 从 `~/.devtoolkit/plugins/` 或应用内 plugins/ 加载 .toml + .js
+- 从 `~/.tool-bench/plugins/` 或应用内 plugins/ 加载 .toml + .js
 - Dynamic import
 - 插件启用/禁用
 - 本地插件市场（filesystem browse）

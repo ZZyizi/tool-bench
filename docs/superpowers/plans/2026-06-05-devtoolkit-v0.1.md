@@ -10,7 +10,15 @@
 
 **Reference Spec:** `docs/superpowers/specs/2026-06-05-devtoolkit-v0.1-design.md`
 
-**Working Directory:** `d:\project\tool-bench\devtoolkit` (run all commands from here unless stated otherwise)
+**Working Directory:** `d:\project\tool-bench` (run all commands from the project root unless stated otherwise)
+
+**Package naming:**
+- npm package: `tool-bench` (in `package.json`)
+- Rust crate: `toolBench` (in `src-tauri/Cargo.toml [package].name`)
+- Rust lib: `tool_bench_lib` (in `src-tauri/Cargo.toml [lib].name`)
+- Tauri identifier: `com.toolBench.app` (in `src-tauri/tauri.conf.json`)
+- Display name: `toolBench`
+- `src-tauri/src/main.rs` calls `tool_bench_lib::run()`
 
 ---
 
