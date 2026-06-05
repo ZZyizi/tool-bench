@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '../../api';
 import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import type { PortInfo } from '../../../types';
@@ -13,43 +13,30 @@ export function PortView() {
   const [actionMessage, setActionMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
   const [query, setQuery] = useState('');
 
-  const filteredPorts = useMemo(() => {
-    const q = query.trim();
-    if (!q) return ports;
-    const portQuery = /^\d+$/.test(q) ? parseInt(q, 10) : null;
-    const lower = q.toLowerCase();
-    return ports.filter((p) => {
-      if (portQuery !== null && p.port === portQuery) return true;
-      if (p.process_name && p.process_name.toLowerCase().includes(lower)) return true;
-      return false;
-    });
-  }, [ports, query]);
-
-  useEffect(() => {
-    if (
-      selected &&
-      !filteredPorts.some((p) => p.port === selected.port && p.pid === selected.pid)
-    ) {
-      setSelected(null);
-    }
-  }, [filteredPorts, selected]);
-
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const list = await api.listPorts();
+      const list = await api.listPorts(query);
       setPorts(list);
+      // Backend now does the filtering; if the active selection falls out
+      // of the result set, clear it so the footer doesn't claim a row the
+      // user can't see.
+      setSelected((prev) =>
+        prev && !list.some((p) => p.port === prev.port && p.pid === prev.pid) ? null : prev,
+      );
     } catch (e) {
       setError(String(e));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [query]);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    // Debounce: avoid hammering netstat/lsof on every keystroke.
+    const timer = setTimeout(refresh, 300);
+    return () => clearTimeout(timer);
+  }, [query, refresh]);
 
   const handleKill = useCallback(async () => {
     if (!selected) return;
@@ -95,9 +82,9 @@ export function PortView() {
       )}
 
       <div className="port-view__table">
-        {filteredPorts.length === 0 && !loading && !error ? (
+        {ports.length === 0 && !loading && !error ? (
           <div className="port-view__empty">
-            {ports.length === 0 ? '没有检测到端口占用' : `没有匹配 "${query}" 的端口`}
+            {query ? `没有匹配 "${query}" 的端口` : '没有检测到端口占用'}
           </div>
         ) : (
           <table>
@@ -111,7 +98,7 @@ export function PortView() {
               </tr>
             </thead>
             <tbody>
-              {filteredPorts.map((p) => {
+              {ports.map((p) => {
                 const isSelected = selected?.port === p.port && selected?.pid === p.pid;
                 return (
                   <tr
