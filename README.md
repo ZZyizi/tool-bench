@@ -293,7 +293,7 @@ npm run tauri dev
 
 ## 资源链接
 
-- **产品文档**：[PRD.md](PRD.md)
+- **产品文档**：[docs/PRD.md](docs/PRD.md)
 - **v0.1 设计**：[docs/superpowers/specs/2026-06-05-devtoolkit-v0.1-design.md](docs/superpowers/specs/2026-06-05-devtoolkit-v0.1-design.md)
 - **v0.1 计划**：[docs/superpowers/plans/2026-06-05-devtoolkit-v0.1.md](docs/superpowers/plans/2026-06-05-devtoolkit-v0.1.md)
 - **Tauri 2 文档**：https://tauri.app/develop/
