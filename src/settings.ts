@@ -7,11 +7,15 @@ export type CloseBehavior = 'quit' | 'hide';
 export interface AppSettings {
   mode: AppMode;
   closeBehavior: CloseBehavior;
+  /// Stable ids (`app:<hash>` for installed apps, `tool:<id>` for built-in
+  /// tools) of items pinned into the quick-switcher. Order is preserved.
+  pinnedApps: string[];
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   mode: 'desktop',
   closeBehavior: 'hide',
+  pinnedApps: [],
 };
 
 const STORAGE_KEY = 'devtoolkit.settings.v1';
@@ -20,10 +24,11 @@ const CHANGE_EVENT = 'devtoolkit-settings-changed';
 function isAppSettings(value: unknown): value is AppSettings {
   if (!value || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
-  return (
-    (v.mode === 'embedded' || v.mode === 'desktop') &&
-    (v.closeBehavior === 'quit' || v.closeBehavior === 'hide')
-  );
+  if (!(v.mode === 'embedded' || v.mode === 'desktop')) return false;
+  if (!(v.closeBehavior === 'quit' || v.closeBehavior === 'hide')) return false;
+  if (!Array.isArray(v.pinnedApps)) return false;
+  if (!v.pinnedApps.every((id) => typeof id === 'string')) return false;
+  return true;
 }
 
 export function loadSettings(): AppSettings {
@@ -81,11 +86,40 @@ export function useSettings(): [AppSettings, Setter] {
     });
   }, []);
 
+  // Pull the server-side pinned list once on mount, then keep it in sync. The
+  // backend is the source of truth so the same pinned set is visible in the
+  // quick-switcher and in the settings panel.
+  useEffect(() => {
+    let cancelled = false;
+    invoke<{ ids: string[] }>('get_pinned_apps')
+      .then((server) => {
+        if (cancelled) return;
+        if (
+          server.ids.length !== settings.pinnedApps.length ||
+          server.ids.some((id, i) => id !== settings.pinnedApps[i])
+        ) {
+          setSettings({ ...settings, pinnedApps: server.ids });
+        }
+      })
+      .catch(() => {
+        // Backend may not be available in non-Tauri contexts; ignore.
+      });
+    return () => {
+      cancelled = true;
+    };
+    // We intentionally only sync on mount — subsequent edits go through the
+    // setter, which writes to the backend.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const setter: Setter = (next) => {
     saveSettings(next);
     setSettings(next);
     invoke('set_close_behavior', { behavior: next.closeBehavior }).catch((err) => {
       console.error('[settings] failed to sync close behavior to backend', err);
+    });
+    invoke('set_pinned_apps', { apps: { ids: next.pinnedApps } }).catch((err) => {
+      console.error('[settings] failed to sync pinned apps to backend', err);
     });
   };
 

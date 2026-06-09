@@ -1,0 +1,203 @@
+/* Outer wrapper that fills the frameless window and is the drag-handle.
+   Padding here creates breathing room so the inner card's box-shadow is
+   fully visible without being clipped at the window edges. */
+.qs-drag-root {
+  height: 100vh;
+  padding: 6px;
+  box-sizing: border-box;
+  background: transparent;
+  -webkit-app-region: drag;
+  -webkit-font-smoothing: antialiased;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--fg);
+  font-size: 14px;
+  overflow: hidden;
+  display: flex;
+}
+
+.qs__no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* The visual card. box-sizing: border-box is critical: with content-box,
+   `height: 100%` + 1px border on each side exceeded the parent's content
+   box and the input row overlapped the result row. */
+.qs {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: rgba(36, 36, 36, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.2);
+  animation: qs-appear 120ms ease-out;
+}
+
+@keyframes qs-appear {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.qs__row {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.qs__row--input {
+  height: 48px;
+  padding: 0 14px;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.qs__row--result {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 6px;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.qs__search-icon {
+  color: var(--fg-muted);
+  flex-shrink: 0;
+}
+
+.qs__input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--fg);
+  font-size: 14px;
+  font-family: inherit;
+  caret-color: var(--accent);
+  padding: 0;
+}
+
+.qs__input::placeholder {
+  color: var(--fg-muted);
+  font-size: 12.5px;
+}
+
+.qs__clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  border: 0;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 80ms ease, color 80ms ease;
+}
+
+.qs__clear:hover {
+  background: var(--row-hover);
+  color: var(--fg);
+}
+
+/* Result row: a single high-emphasis row taking the full available width. */
+.qs__item {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-size: 13px;
+  transition: background 80ms ease;
+}
+
+.qs__item--active {
+  background: var(--row-selected);
+}
+
+.qs__item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.qs__item-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qs__item-sub {
+  color: var(--fg-muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  max-width: 40%;
+}
+
+.qs__pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  background: transparent;
+  color: var(--fg-muted);
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 80ms ease, background 80ms ease;
+}
+
+.qs__pin:hover {
+  color: var(--accent);
+  background: rgba(74, 158, 255, 0.12);
+}
+
+.qs__hint {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  width: 100%;
+  height: 100%;
+}
+
+.qs__error {
+  padding: 6px 14px;
+  font-size: 11.5px;
+  color: var(--error);
+  background: rgba(255, 85, 85, 0.08);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}

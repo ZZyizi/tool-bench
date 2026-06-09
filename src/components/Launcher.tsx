@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Box, Settings, Zap, type LucideIcon } from 'lucide-react';
+import { Box, Search, Settings, Zap, type LucideIcon } from 'lucide-react';
 import { globalRegistry } from '../plugins/registry';
 import type { Plugin } from '../plugins/types';
 import './Launcher.css';
@@ -33,19 +33,41 @@ export function Launcher({ onOpenSettings }: LauncherProps) {
     }
   };
 
+  const openQuickSwitcher = async () => {
+    setError(null);
+    try {
+      await invoke('open_quick_switcher');
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
   return (
     <div className="launcher">
       <header className="launcher__header">
         <h1 className="launcher__title">DevToolkit</h1>
-        <button
-          type="button"
-          className="launcher__settings-btn"
-          onClick={onOpenSettings}
-          aria-label="打开设置"
-          title="设置"
-        >
-          <Settings size={18} aria-hidden />
-        </button>
+        <div className="launcher__header-actions">
+          <button
+            type="button"
+            className="launcher__qs-btn"
+            onClick={openQuickSwitcher}
+            title="快速启动 (Alt+Space)"
+            aria-label="打开快速启动"
+          >
+            <Search size={16} aria-hidden />
+            <span>快速启动</span>
+            <kbd className="launcher__kbd">Alt+Space</kbd>
+          </button>
+          <button
+            type="button"
+            className="launcher__settings-btn"
+            onClick={onOpenSettings}
+            aria-label="打开设置"
+            title="设置"
+          >
+            <Settings size={18} aria-hidden />
+          </button>
+        </div>
       </header>
 
       {error && <div className="launcher__error">打开工具失败: {error}</div>}

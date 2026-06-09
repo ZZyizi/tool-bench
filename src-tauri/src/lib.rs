@@ -1,13 +1,17 @@
 pub mod cmd;
 pub mod platform;
 
+use std::path::PathBuf;
 use std::sync::atomic::AtomicU8;
 use std::sync::Arc;
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, WindowEvent};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
+use crate::cmd::pinned::{default_pinned_path, PinnedStore};
+use crate::cmd::quick_switcher;
 use crate::cmd::windows::CLOSE_HIDE;
 use crate::platform::port_scanner::PortScanner;
 
@@ -21,13 +25,22 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(AppState {
             scanner: platform::create_scanner(),
         })
         .manage(close_behavior.clone())
         .setup(move |app| {
+            let pinned_path: PathBuf = default_pinned_path(&app.handle()).unwrap_or_else(|_| {
+                std::env::temp_dir().join("devtoolkit").join("pinned.json")
+            });
+            app.manage(PinnedStore::new(pinned_path));
+
             build_tray(app)?;
             install_main_window_close_handler(app, close_behavior.clone());
+            if let Err(e) = register_global_shortcut(app.handle()) {
+                eprintln!("[devtoolkit] failed to register Alt+Space shortcut: {e}");
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -37,6 +50,11 @@ pub fn run() {
             cmd::capabilities::list_capabilities,
             cmd::windows::open_tool_window,
             cmd::windows::set_close_behavior,
+            cmd::apps::list_installed_apps,
+            cmd::apps::launch_app,
+            cmd::pinned::get_pinned_apps,
+            cmd::pinned::set_pinned_apps,
+            cmd::quick_switcher::open_quick_switcher,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -45,9 +63,10 @@ pub fn run() {
 fn build_tray(app: &mut tauri::App) -> tauri::Result<()> {
     let show_item =
         MenuItem::with_id(app, "show_main", "显示主窗口", true, None::<&str>)?;
+    let qs_item = MenuItem::with_id(app, "show_qs", "快速启动", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&show_item, &separator, &quit_item])?;
+    let menu = Menu::with_items(app, &[&show_item, &qs_item, &separator, &quit_item])?;
 
     let _tray = TrayIconBuilder::with_id("main-tray")
         .icon(
@@ -65,6 +84,9 @@ fn build_tray(app: &mut tauri::App) -> tauri::Result<()> {
                     let _ = w.unminimize();
                     let _ = w.set_focus();
                 }
+            }
+            "show_qs" => {
+                let _ = quick_switcher::open_quick_switcher(app.clone());
             }
             "quit" => {
                 app.exit(0);
@@ -92,6 +114,18 @@ fn build_tray(app: &mut tauri::App) -> tauri::Result<()> {
             }
         })
         .build(app)?;
+    Ok(())
+}
+
+fn register_global_shortcut(app: &tauri::AppHandle) -> Result<(), tauri_plugin_global_shortcut::Error> {
+    let shortcut = Shortcut::new(Some(Modifiers::ALT), Code::Space);
+    let app_handle = app.clone();
+    app.global_shortcut()
+        .on_shortcut(shortcut, move |_app, _shortcut, event| {
+            if event.state() == ShortcutState::Pressed {
+                let _ = quick_switcher::open_quick_switcher(app_handle.clone());
+            }
+        })?;
     Ok(())
 }
 

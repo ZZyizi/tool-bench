@@ -41,6 +41,46 @@
   border-color: var(--accent);
 }
 
+.launcher__header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.launcher__qs-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.launcher__qs-btn:hover {
+  background: var(--row-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.launcher__kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 10.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--fg-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  line-height: 1.4;
+}
+
 .launcher__error {
   margin: 12px 24px 0;
   padding: 10px 12px;
