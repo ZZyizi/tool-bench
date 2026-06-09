@@ -37,9 +37,10 @@ fn toggle_or_create(app: &AppHandle) -> Result<(), String> {
     .decorations(false)
     .always_on_top(true)
     .skip_taskbar(true)
-    .resizable(false)
-    .inner_size(720.0, 120.0)
-    .min_inner_size(560.0, 120.0)
+    .resizable(true)
+    .inner_size(720.0, 380.0)
+    .min_inner_size(480.0, 240.0)
+    .max_inner_size(960.0, 640.0)
     .focused(true);
 
     builder = builder.visible(false);
@@ -64,7 +65,7 @@ fn center_screen(window: &tauri::WebviewWindow) {
     };
     let size = window
         .inner_size()
-        .unwrap_or(tauri::PhysicalSize::new(720, 120));
+        .unwrap_or(tauri::PhysicalSize::new(720, 380));
     let pos = monitor.position();
     let mon_w = monitor.size().width as i32;
     let mon_h = monitor.size().height as i32;

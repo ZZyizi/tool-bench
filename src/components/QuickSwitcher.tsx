@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Pin, PinOff, Search, X } from 'lucide-react';
+import { Box, Pin, PinOff, Search, X, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
@@ -27,6 +27,7 @@ type Item =
     };
 
 const TOOL_PREFIX = 'tool:';
+const CELL_PX = 96; // width of one cell — keep in sync with .qs__cell CSS
 
 function buildToolItems(): Item[] {
   return globalRegistry.list().map((plugin) => ({
@@ -66,8 +67,10 @@ export function QuickSwitcher() {
   const [toolItems] = useState<Item[]>(() => buildToolItems());
   const [installedApps, setInstalledApps] = useState<InstalledApp[] | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [colCount, setColCount] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   // Focus the search field on mount. The window is always-on-top and
   // decorations=false, so users expect to start typing the moment Alt+Space
@@ -96,6 +99,21 @@ export function QuickSwitcher() {
     };
   }, []);
 
+  // Track the grid's actual width so keyboard navigation can convert
+  // a 1-D index into (row, col) correctly. The grid uses `auto-fill` so the
+  // column count depends on the current window width.
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const w = entry.contentRect.width;
+      // Subtract the inline gap (4px) by floor() on (w + gap) / (cell + gap).
+      setColCount(Math.max(1, Math.floor((w + 4) / CELL_PX)));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // Build the visible list. When the search box is empty, show pinned items
   // in their pinned order. When non-empty, replace the view with search
   // results across both tools and installed apps, ranked by score.
@@ -115,12 +133,10 @@ export function QuickSwitcher() {
       .map((item) => ({ item, s: score(q, item.name) }))
       .filter((x) => x.s !== Number.POSITIVE_INFINITY)
       .sort((a, b) => a.s - b.s);
-    return scored.slice(0, 32).map((x) => x.item);
+    return scored.slice(0, 64).map((x) => x.item);
   }, [query, toolItems, installedApps, settings.pinnedApps]);
 
-  // Reset the active row whenever the visible list changes shape. Cap the
-  // index to the new length so arrow keys still work after a delete-shortens
-  // the list.
+  // Reset the active index whenever the visible list changes shape.
   useEffect(() => {
     setActiveIndex((i) => (i >= visible.length ? 0 : i));
   }, [visible.length]);
@@ -133,8 +149,8 @@ export function QuickSwitcher() {
     }
   }, []);
 
-  const activate = useCallback(
-    async (item: Item) => {
+  const launchItem = useCallback(
+    async (item: Item, useAndGo: boolean) => {
       setError(null);
       try {
         if (item.kind === 'tool') {
@@ -145,12 +161,14 @@ export function QuickSwitcher() {
             title: plugin.manifest.name,
             width: plugin.manifest.windowWidth ?? null,
             height: plugin.manifest.windowHeight ?? null,
-            useAndGo: false,
+            useAndGo,
           });
         } else {
           await api.launchApp(item.target);
         }
-        await closeWindow();
+        if (useAndGo) {
+          await closeWindow();
+        }
       } catch (e) {
         setError(String(e));
       }
@@ -176,6 +194,21 @@ export function QuickSwitcher() {
     [settings, setSettings],
   );
 
+  const moveActive = useCallback(
+    (deltaRow: number, deltaCol: number) => {
+      if (visible.length === 0) return;
+      setActiveIndex((i) => {
+        const row = Math.floor(i / colCount);
+        const col = i % colCount;
+        const newRow = Math.max(0, Math.min(Math.floor((visible.length - 1) / colCount), row + deltaRow));
+        const newCol = Math.max(0, Math.min(colCount - 1, col + deltaCol));
+        const next = newRow * colCount + newCol;
+        return Math.min(next, visible.length - 1);
+      });
+    },
+    [colCount, visible.length],
+  );
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -184,22 +217,28 @@ export function QuickSwitcher() {
     }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      if (visible.length > 0) {
-        setActiveIndex((i) => (i + 1) % visible.length);
-      }
+      moveActive(1, 0);
       return;
     }
     if (e.key === 'ArrowUp') {
       e.preventDefault();
-      if (visible.length > 0) {
-        setActiveIndex((i) => (i - 1 + visible.length) % visible.length);
-      }
+      moveActive(-1, 0);
+      return;
+    }
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      moveActive(0, 1);
+      return;
+    }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      moveActive(0, -1);
       return;
     }
     if (e.key === 'Enter') {
       e.preventDefault();
       const item = visible[activeIndex];
-      if (item) void activate(item);
+      if (item) void launchItem(item, false);
       return;
     }
   };
@@ -210,7 +249,6 @@ export function QuickSwitcher() {
   };
 
   const isPinned = (id: string) => settings.pinnedApps.includes(id);
-  const active = visible[activeIndex];
   const showEmptyHint = query.trim() === '' && visible.length === 0;
   const showNoMatch = query.trim() !== '' && visible.length === 0;
 
@@ -226,7 +264,7 @@ export function QuickSwitcher() {
           onKeyDown={onKeyDown}
           placeholder={
             query.trim() === ''
-              ? '搜索应用或工具...  (↑↓ 选择 · Enter 打开 · Esc 关闭)'
+              ? '搜索应用或工具...  (↑↓←→ 移动 · Enter 打开 · Esc 关闭)'
               : '输入中...  (✕ 清空恢复已固定)'
           }
           spellCheck={false}
@@ -245,39 +283,65 @@ export function QuickSwitcher() {
         )}
       </div>
 
-      <div className="qs__row qs__row--result" role="listbox" aria-label="搜索结果">
-        {active ? (
-          <button
-            type="button"
-            className="qs__item qs__item--active"
-            onClick={() => void activate(active)}
-            role="option"
-            aria-selected="true"
-          >
-            <span className="qs__item-icon" aria-hidden>
-              <active.icon size={18} strokeWidth={2} />
-            </span>
-            <span className="qs__item-name">{active.name}</span>
-            <span className="qs__item-sub">
-              {active.kind === 'tool' ? active.description : '已安装应用'}
-            </span>
-            <button
-              type="button"
-              className="qs__pin"
-              onClick={(e) => {
-                e.stopPropagation();
-                togglePin(active);
-              }}
-              aria-label={isPinned(active.id) ? '取消固定' : '固定'}
-              title={isPinned(active.id) ? '取消固定' : '固定'}
-            >
-              {isPinned(active.id) ? (
-                <PinOff size={14} aria-hidden />
-              ) : (
-                <Pin size={14} aria-hidden />
-              )}
-            </button>
-          </button>
+      <div className="qs__row qs__row--result" ref={gridRef} role="listbox" aria-label="搜索结果">
+        {visible.length > 0 ? (
+          <div className="qs__grid">
+            {visible.map((item, i) => {
+              const Icon = item.icon;
+              const active = i === activeIndex;
+              const pinned = isPinned(item.id);
+              return (
+                <div
+                  key={item.id}
+                  className={`qs__cell${active ? ' qs__cell--active' : ''}`}
+                  role="option"
+                  aria-selected={active}
+                  tabIndex={-1}
+                  onMouseEnter={() => setActiveIndex(i)}
+                  onClick={(e) => {
+                    // Clicks on the action buttons are caught by their own
+                    // onClick + stopPropagation, so a click on the cell body
+                    // here means "open this item".
+                    if (e.defaultPrevented) return;
+                    void launchItem(item, false);
+                  }}
+                >
+                  <div className="qs__cell-actions">
+                    <button
+                      type="button"
+                      className="qs__cell-action"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        togglePin(item);
+                      }}
+                      aria-label={pinned ? '取消固定' : '固定'}
+                      title={pinned ? '取消固定' : '固定'}
+                    >
+                      {pinned ? <PinOff size={12} aria-hidden /> : <Pin size={12} aria-hidden />}
+                    </button>
+                    <button
+                      type="button"
+                      className="qs__cell-action"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void launchItem(item, true);
+                      }}
+                      aria-label="即开即用"
+                      title="即开即用：打开后自动关闭窗口"
+                    >
+                      <Zap size={12} aria-hidden />
+                    </button>
+                  </div>
+                  <div className="qs__cell-icon" aria-hidden>
+                    <Icon size={32} strokeWidth={1.5} />
+                  </div>
+                  <div className="qs__cell-name" title={item.name}>
+                    {item.name}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         ) : showNoMatch ? (
           <div className="qs__hint">没有匹配的结果</div>
         ) : showEmptyHint ? (

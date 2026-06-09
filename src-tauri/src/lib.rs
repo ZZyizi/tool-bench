@@ -32,14 +32,14 @@ pub fn run() {
         .manage(close_behavior.clone())
         .setup(move |app| {
             let pinned_path: PathBuf = default_pinned_path(&app.handle()).unwrap_or_else(|_| {
-                std::env::temp_dir().join("devtoolkit").join("pinned.json")
+                std::env::temp_dir().join("toolBench").join("pinned.json")
             });
             app.manage(PinnedStore::new(pinned_path));
 
             build_tray(app)?;
             install_main_window_close_handler(app, close_behavior.clone());
             if let Err(e) = register_global_shortcut(app.handle()) {
-                eprintln!("[devtoolkit] failed to register Alt+Space shortcut: {e}");
+                eprintln!("[toolBench] failed to register Alt+Space shortcut: {e}");
             }
             Ok(())
         })
@@ -74,7 +74,7 @@ fn build_tray(app: &mut tauri::App) -> tauri::Result<()> {
                 .cloned()
                 .ok_or_else(|| tauri::Error::AssetNotFound("default window icon".into()))?,
         )
-        .tooltip("DevToolkit")
+        .tooltip("toolBench")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -140,7 +140,7 @@ fn install_main_window_close_handler(
                 if close_behavior.load(std::sync::atomic::Ordering::Relaxed) == CLOSE_HIDE {
                     api.prevent_close();
                     if let Err(e) = main_for_event.hide() {
-                        eprintln!("[devtoolkit] failed to hide main window: {e}");
+                        eprintln!("[toolBench] failed to hide main window: {e}");
                     }
                 }
             }

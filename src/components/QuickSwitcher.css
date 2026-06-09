@@ -63,9 +63,11 @@
 .qs__row--result {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 6px;
+  padding: 10px;
   align-items: stretch;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-app-region: no-drag;
 }
 
 .qs__search-icon {
@@ -111,82 +113,112 @@
   color: var(--fg);
 }
 
-/* Result row: a single high-emphasis row taking the full available width. */
-.qs__item {
+/* Result grid: auto-fill columns of CELL_PX width (96px in JS) so keyboard
+   navigation can derive the column count from a ResizeObserver. */
+.qs__grid {
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
-  align-items: center;
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 4px;
   width: 100%;
-  height: 100%;
-  min-height: 44px;
-  padding: 0 12px;
-  border: 0;
+}
+
+.qs__cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 88px;
+  padding: 8px 6px 6px;
   background: transparent;
-  color: var(--fg);
+  border: 0;
   border-radius: 8px;
   cursor: pointer;
-  text-align: left;
   font-family: inherit;
-  font-size: 13px;
-  transition: background 80ms ease;
+  color: var(--fg);
+  outline: 1px solid transparent;
+  outline-offset: -1px;
+  transition: background 80ms ease, outline-color 80ms ease;
+  user-select: none;
 }
 
-.qs__item--active {
+.qs__cell:hover {
+  background: var(--row-hover);
+}
+
+.qs__cell--active {
   background: var(--row-selected);
+  outline-color: var(--accent);
 }
 
-.qs__item-icon {
-  display: inline-flex;
+.qs__cell-icon {
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 36px;
+  height: 36px;
   color: var(--accent);
   flex-shrink: 0;
 }
 
-.qs__item-name {
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.qs__item-sub {
-  color: var(--fg-muted);
+.qs__cell-name {
   font-size: 11.5px;
+  line-height: 1.3;
+  text-align: center;
+  width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 0;
-  max-width: 40%;
+  color: var(--fg);
 }
 
-.qs__pin {
+/* Hover-revealed action buttons in the top-right corner. Visible on cell
+   hover and on the active cell. */
+.qs__cell-actions {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 100ms ease;
+  pointer-events: none;
+}
+
+.qs__cell:hover .qs__cell-actions,
+.qs__cell--active .qs__cell-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.qs__cell-action {
+  width: 20px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: 0;
-  background: transparent;
-  color: var(--fg-muted);
+  padding: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
   border-radius: 4px;
+  color: var(--fg-muted);
   cursor: pointer;
   flex-shrink: 0;
-  transition: color 80ms ease, background 80ms ease;
+  transition: color 80ms ease, border-color 80ms ease, background 80ms ease;
 }
 
-.qs__pin:hover {
+.qs__cell-action:hover {
   color: var(--accent);
-  background: rgba(74, 158, 255, 0.12);
+  border-color: var(--accent);
+  background: var(--bg-elevated);
 }
 
 .qs__hint {
   display: flex;
   align-items: center;
-  padding: 0 14px;
+  justify-content: center;
+  padding: 20px;
   color: var(--fg-muted);
   font-size: 12.5px;
   width: 100%;
