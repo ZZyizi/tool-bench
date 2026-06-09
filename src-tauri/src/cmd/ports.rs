@@ -22,6 +22,15 @@ pub struct KillResult {
 }
 
 #[derive(Serialize)]
+pub struct KillByNameResult {
+    pub success: bool,
+    pub name: String,
+    pub killed: u32,
+    pub failed: u32,
+    pub message: String,
+}
+
+#[derive(Serialize)]
 pub struct FilteredPorts {
     pub ports: Vec<PortInfo>,
     pub hidden_system: usize,
@@ -85,6 +94,62 @@ pub fn list_ports(query: String, state: State<'_, AppState>) -> Result<FilteredP
     let after_query = filter_ports(raw, &query);
     let (ports, hidden_system) = hide_system(after_query);
     Ok(FilteredPorts { ports, hidden_system })
+}
+
+fn pids_matching_name(ports: &[PortInfo], name: &str) -> Vec<u32> {
+    let mut pids: Vec<u32> = ports
+        .iter()
+        .filter(|p| p.process_name.as_deref() == Some(name))
+        .map(|p| p.pid)
+        .collect();
+    pids.sort_unstable();
+    pids.dedup();
+    pids
+}
+
+#[tauri::command]
+pub fn kill_by_process_name(
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<KillByNameResult, String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("process name must not be empty".into());
+    }
+    let ports = state.scanner.list().map_err(|e| e.to_string())?;
+    let pids = pids_matching_name(&ports, trimmed);
+
+    if pids.is_empty() {
+        return Ok(KillByNameResult {
+            success: false,
+            name: trimmed.to_string(),
+            killed: 0,
+            failed: 0,
+            message: format!("No process named \"{}\" is listening on any port", trimmed),
+        });
+    }
+
+    let mut killed: u32 = 0;
+    let mut failed: u32 = 0;
+    for pid in &pids {
+        match state.scanner.kill(*pid) {
+            Ok(()) => killed += 1,
+            Err(_) => failed += 1,
+        }
+    }
+    let success = killed > 0;
+    let message = if failed == 0 {
+        format!("Killed {} \"{}\" process(es)", killed, trimmed)
+    } else {
+        format!("Killed {}, failed {} (\"{}\")", killed, failed, trimmed)
+    };
+    Ok(KillByNameResult {
+        success,
+        name: trimmed.to_string(),
+        killed,
+        failed,
+        message,
+    })
 }
 
 #[tauri::command]
@@ -230,5 +295,38 @@ mod tests {
         assert_eq!(visible.len(), 1);
         assert_eq!(visible[0].port, 8080);
         assert_eq!(hidden, 3);
+    }
+
+    #[test]
+    fn pids_matching_name_dedupes_same_pid_across_ports() {
+        let ports = vec![
+            make_port(3000, 100, Some("node")),
+            make_port(3001, 100, Some("node")),
+            make_port(3002, 200, Some("node")),
+        ];
+        let pids = pids_matching_name(&ports, "node");
+        assert_eq!(pids, vec![100, 200]);
+    }
+
+    #[test]
+    fn pids_matching_name_is_case_sensitive_and_exact() {
+        let ports = vec![
+            make_port(80, 1, Some("node")),
+            make_port(81, 2, Some("Node")),
+            make_port(82, 3, Some("node.exe")),
+            make_port(83, 4, Some("python")),
+            make_port(84, 5, None),
+        ];
+        assert_eq!(pids_matching_name(&ports, "node"), vec![1]);
+        assert_eq!(pids_matching_name(&ports, "Node"), vec![2]);
+        assert_eq!(pids_matching_name(&ports, "node.exe"), vec![3]);
+        assert!(pids_matching_name(&ports, "missing").is_empty());
+    }
+
+    #[test]
+    fn pids_matching_name_skips_unknown_process_names() {
+        let ports = vec![make_port(80, 1, None), make_port(81, 2, Some("node"))];
+        let pids = pids_matching_name(&ports, "node");
+        assert_eq!(pids, vec![2]);
     }
 }

@@ -145,3 +145,28 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.port-view__bulk-clean {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--danger);
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.port-view__bulk-clean:hover:not(:disabled) {
+  background: var(--danger);
+  color: white;
+}
+
+.port-view__bulk-clean:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  border-color: var(--border);
+}

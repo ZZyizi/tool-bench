@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Eraser } from 'lucide-react';
 import { api } from '../../api';
 import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import type { PortInfo } from '../../../types';
+import { ProcessPickerDialog } from './ProcessPickerDialog';
 import './PortView.css';
 
 export function PortView() {
@@ -13,6 +15,9 @@ export function PortView() {
   const [actionMessage, setActionMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
   const [query, setQuery] = useState('');
   const [hiddenSystemCount, setHiddenSystemCount] = useState(0);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pendingName, setPendingName] = useState<string | null>(null);
+  const [bulkKilling, setBulkKilling] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -21,9 +26,6 @@ export function PortView() {
       const data = await api.listPorts(query);
       setPorts(data.ports);
       setHiddenSystemCount(data.hidden_system);
-      // Backend now does the filtering; if the active selection falls out
-      // of the result set, clear it so the footer doesn't claim a row the
-      // user can't see.
       setSelected((prev) =>
         prev && !data.ports.some((p) => p.port === prev.port && p.pid === prev.pid) ? null : prev,
       );
@@ -35,10 +37,17 @@ export function PortView() {
   }, [query]);
 
   useEffect(() => {
-    // Debounce: avoid hammering netstat/lsof on every keystroke.
     const timer = setTimeout(refresh, 300);
     return () => clearTimeout(timer);
   }, [query, refresh]);
+
+  const processNames = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of ports) {
+      if (p.process_name) set.add(p.process_name);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [ports]);
 
   const handleKill = useCallback(async () => {
     if (!selected) return;
@@ -46,17 +55,35 @@ export function PortView() {
     setActionMessage(null);
     try {
       const result = await api.killPort(selected.port);
-      if (result.success) {
-        setActionMessage({ kind: 'success', text: result.message });
-      } else {
-        setActionMessage({ kind: 'error', text: result.message });
-      }
+      setActionMessage({
+        kind: result.success ? 'success' : 'error',
+        text: result.message,
+      });
       setSelected(null);
       await refresh();
     } catch (e) {
       setActionMessage({ kind: 'error', text: String(e) });
     }
   }, [selected, refresh]);
+
+  const handleBulkKill = useCallback(async () => {
+    if (!pendingName) return;
+    setBulkKilling(true);
+    setActionMessage(null);
+    try {
+      const result = await api.killByProcessName(pendingName);
+      setActionMessage({
+        kind: result.success ? 'success' : 'error',
+        text: result.message,
+      });
+    } catch (e) {
+      setActionMessage({ kind: 'error', text: String(e) });
+    } finally {
+      setBulkKilling(false);
+      setPendingName(null);
+      await refresh();
+    }
+  }, [pendingName, refresh]);
 
   return (
     <div className="port-view">
@@ -72,6 +99,15 @@ export function PortView() {
           />
           <button className="port-view__refresh" onClick={refresh} disabled={loading}>
             {loading ? '刷新中…' : '刷新'}
+          </button>
+          <button
+            className="port-view__bulk-clean"
+            onClick={() => setPickerOpen(true)}
+            disabled={processNames.length === 0}
+            title="按进程名一键清理"
+          >
+            <Eraser size={14} aria-hidden style={{ verticalAlign: '-2px', marginRight: 4 }} />
+            一键清理
           </button>
         </div>
       </div>
@@ -139,6 +175,17 @@ export function PortView() {
         </button>
       </div>
 
+      {pickerOpen && (
+        <ProcessPickerDialog
+          processNames={processNames}
+          onClose={() => setPickerOpen(false)}
+          onConfirm={(name) => {
+            setPickerOpen(false);
+            setPendingName(name);
+          }}
+        />
+      )}
+
       {confirming && selected && (
         <ConfirmDialog
           title="确认释放端口"
@@ -146,6 +193,16 @@ export function PortView() {
           confirmLabel="确认释放"
           onConfirm={handleKill}
           onCancel={() => setConfirming(false)}
+        />
+      )}
+
+      {pendingName && (
+        <ConfirmDialog
+          title="一键释放确认"
+          message={`确定要结束所有名为 "${pendingName}" 的进程吗？此操作不可撤销。`}
+          confirmLabel={bulkKilling ? '释放中…' : '一键释放'}
+          onConfirm={handleBulkKill}
+          onCancel={() => setPendingName(null)}
         />
       )}
     </div>

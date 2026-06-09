@@ -33,6 +33,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             cmd::ports::list_ports,
             cmd::ports::kill_port,
+            cmd::ports::kill_by_process_name,
             cmd::capabilities::list_capabilities,
             cmd::windows::open_tool_window,
             cmd::windows::set_close_behavior,

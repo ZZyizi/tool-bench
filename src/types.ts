@@ -15,6 +15,14 @@ export interface KillResult {
   message: string;
 }
 
+export interface KillByNameResult {
+  success: boolean;
+  name: string;
+  killed: number;
+  failed: number;
+  message: string;
+}
+
 export interface Capabilities {
   network_read: boolean;
   process_read: boolean;
