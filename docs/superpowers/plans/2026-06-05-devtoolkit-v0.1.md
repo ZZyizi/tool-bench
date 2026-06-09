@@ -1,8 +1,8 @@
-# DevToolkit V0.1 MVP Implementation Plan
+# toolBench V0.1 MVP Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement DevToolkit v0.1 MVP: port list + kill + base UI + plugin infrastructure (JS/TS plugin model, port-manager as the first built-in plugin).
+**Goal:** Implement toolBench v0.1 MVP: port list + kill + base UI + plugin infrastructure (JS/TS plugin model, port-manager as the first built-in plugin).
 
 **Architecture:** Frontend React app with a plugin system (`Plugin` interface, `PluginRegistry`, `PluginManifest`); one built-in plugin `port-manager`. Rust backend exposes system capabilities as Tauri commands (`list_ports`, `kill_port`, `list_capabilities`) consumed by plugins via `invoke()`. Platform-specific port scanning via `PortScanner` trait, implemented separately for Windows (netstat) and Unix (lsof).
 
@@ -991,7 +991,7 @@ id = "port-manager"
 name = "端口管理"
 version = "0.1.0"
 description = "查看和释放系统占用的端口"
-author = "DevToolkit Team"
+author = "toolBench Team"
 category = "Network"
 icon = "🔌"
 entry = "./index.ts"
@@ -1013,7 +1013,7 @@ const manifest: PluginManifest = {
   name: '端口管理',
   version: '0.1.0',
   description: '查看和释放系统占用的端口',
-  author: 'DevToolkit Team',
+  author: 'toolBench Team',
   category: 'Network',
   icon: '🔌',
   entry: './index.ts',
@@ -1528,7 +1528,7 @@ export function Sidebar({ activeId, onSelect }: SidebarProps) {
 
   return (
     <aside className="sidebar">
-      <h2 className="sidebar__title">DevToolkit</h2>
+      <h2 className="sidebar__title">toolBench</h2>
       {Array.from(grouped.entries()).map(([category, plugins]) => (
         <div key={category} className="sidebar__group">
           <div className="sidebar__group-title">{category}</div>
@@ -1857,5 +1857,5 @@ git commit -m "docs: add v0.1 implementation verification log"
 ## Out of Scope (later milestones)
 
 - V0.2: search/filter, additional built-in plugins (base64, dns, json)
-- V0.3: dynamic plugin loading from `~/.devtoolkit/plugins/`, local browse
+- V0.3: dynamic plugin loading from `~/.tool-bench/plugins/`, local browse
 - V0.4: remote marketplace, signature verification, capability enforcement

@@ -1,7 +1,7 @@
-# DevToolkit V0.1 MVP 设计规格
+# toolBench V0.1 MVP 设计规格
 
 **日期**: 2026-06-05（v2 - 加入插件系统）
-**项目**: DevToolkit (轻量级开发者桌面工具箱) — 工程目录 `d:\project\tool-bench`
+**项目**: toolBench (轻量级开发者桌面工具箱) — 工程目录 `d:\project\tool-bench`
 **包命名**:
 - npm package: `tool-bench`
 - Rust crate: `toolBench`
@@ -79,7 +79,7 @@ id = "port-manager"             # 唯一标识 (kebab-case)
 name = "端口管理"               # 显示名
 version = "0.1.0"
 description = "查看和释放端口占用"
-author = "DevToolkit Team"
+author = "toolBench Team"
 category = "Network"            # Network / Encode / System / Other
 icon = "🔌"                     # emoji 或路径
 entry = "./index.ts"            # 入口文件 (V0.3 动态加载用)
