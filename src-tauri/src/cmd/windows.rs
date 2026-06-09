@@ -1,11 +1,13 @@
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 pub const CLOSE_QUIT: u8 = 0;
 pub const CLOSE_HIDE: u8 = 1;
+const USE_AND_GO_GRACE: Duration = Duration::from_millis(250);
 
 #[tauri::command]
 pub async fn open_tool_window(
@@ -14,6 +16,7 @@ pub async fn open_tool_window(
     title: Option<String>,
     width: Option<f64>,
     height: Option<f64>,
+    use_and_go: Option<bool>,
 ) -> Result<(), String> {
     let label = format!("tool-{}", plugin_id);
     if let Some(existing) = app.get_webview_window(&label) {
@@ -36,7 +39,42 @@ pub async fn open_tool_window(
     } else {
         builder = builder.inner_size(900.0, 600.0);
     }
-    builder.build().map_err(|e| e.to_string())?;
+    let window = builder.build().map_err(|e| e.to_string())?;
+
+    if use_and_go.unwrap_or(false) {
+        let app_handle = app.clone();
+        let label_for_event = label.clone();
+        // A generation counter invalidated on every focus-regain. Each pending
+        // close captures the current generation when scheduled; on fire, it only
+        // closes if its captured generation is still current. This makes the
+        // close robust against transient focus loss during drag / resize /
+        // maximize on Windows.
+        let generation: Arc<AtomicU64> = Arc::new(AtomicU64::new(0));
+        let gen_handler = generation.clone();
+
+        window.on_window_event(move |event| {
+            if let WindowEvent::Focused(focused) = event {
+                if *focused {
+                    gen_handler.fetch_add(1, Ordering::Relaxed);
+                    return;
+                }
+                let gen_inner = gen_handler.clone();
+                let app_inner = app_handle.clone();
+                let label_inner = label_for_event.clone();
+                let captured = gen_handler.load(Ordering::Relaxed);
+
+                std::thread::spawn(move || {
+                    std::thread::sleep(USE_AND_GO_GRACE);
+                    if gen_inner.load(Ordering::Relaxed) == captured {
+                        if let Some(w) = app_inner.get_webview_window(&label_inner) {
+                            let _ = w.close();
+                        }
+                    }
+                });
+            }
+        });
+    }
+
     Ok(())
 }
 

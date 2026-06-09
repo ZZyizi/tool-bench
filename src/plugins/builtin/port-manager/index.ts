@@ -1,4 +1,5 @@
 import type { Plugin, PluginManifest } from '../../types';
+import { Plug } from 'lucide-react';
 import { PortView } from './PortView';
 
 const manifest: PluginManifest = {
@@ -8,7 +9,7 @@ const manifest: PluginManifest = {
   description: '查看和释放系统占用的端口',
   author: 'DevToolkit Team',
   category: 'Network',
-  icon: '',
+  icon: Plug,
   entry: './index.ts',
   capabilities: ['network:read', 'process:read', 'process:kill'],
 };

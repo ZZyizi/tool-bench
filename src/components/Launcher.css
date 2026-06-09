@@ -30,11 +30,10 @@
   height: 32px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 .launcher__settings-btn:hover {
@@ -75,10 +74,15 @@
 }
 
 .launcher__tile {
+  position: relative;
+}
+
+.launcher__tile-main {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
+  width: 100%;
   padding: 16px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
@@ -90,19 +94,52 @@
   transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
 }
 
-.launcher__tile:hover:not(:disabled) {
+.launcher__tile-main:hover:not(:disabled) {
   transform: translateY(-2px);
   border-color: var(--accent);
   background: var(--row-hover);
 }
 
-.launcher__tile:disabled {
+.launcher__tile-main:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.launcher__tile-ephemeral {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg-muted);
+  line-height: 1;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.launcher__tile-ephemeral:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+}
+
+.launcher__tile-ephemeral:disabled {
   opacity: 0.6;
   cursor: progress;
 }
 
 .launcher__icon {
-  font-size: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
   line-height: 1;
 }
 

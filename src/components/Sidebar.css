@@ -28,7 +28,6 @@
   height: 24px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -74,5 +73,9 @@
 }
 
 .sidebar__icon {
-  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  line-height: 1;
 }

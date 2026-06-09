@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { Box, Settings, Zap, type LucideIcon } from 'lucide-react';
 import { globalRegistry } from '../plugins/registry';
 import type { Plugin } from '../plugins/types';
 import './Launcher.css';
@@ -13,7 +14,7 @@ export function Launcher({ onOpenSettings }: LauncherProps) {
   const [error, setError] = useState<string | null>(null);
   const grouped = globalRegistry.byCategory();
 
-  const openTool = async (plugin: Plugin) => {
+  const openTool = async (plugin: Plugin, useAndGo: boolean) => {
     const id = plugin.manifest.id;
     setError(null);
     setOpening(id);
@@ -23,6 +24,7 @@ export function Launcher({ onOpenSettings }: LauncherProps) {
         title: plugin.manifest.name,
         width: plugin.manifest.windowWidth ?? null,
         height: plugin.manifest.windowHeight ?? null,
+        useAndGo,
       });
     } catch (e) {
       setError(String(e));
@@ -42,7 +44,7 @@ export function Launcher({ onOpenSettings }: LauncherProps) {
           aria-label="打开设置"
           title="设置"
         >
-          ⚙
+          <Settings size={18} aria-hidden />
         </button>
       </header>
 
@@ -55,21 +57,33 @@ export function Launcher({ onOpenSettings }: LauncherProps) {
             <div className="launcher__tiles">
               {plugins.map((plugin) => {
                 const isOpening = opening === plugin.manifest.id;
+                const Icon = (plugin.manifest.icon ?? Box) as LucideIcon;
                 return (
-                  <button
-                    key={plugin.manifest.id}
-                    type="button"
-                    className="launcher__tile"
-                    onClick={() => openTool(plugin)}
-                    disabled={isOpening}
-                    title={plugin.manifest.description}
-                  >
-                    <span className="launcher__icon" aria-hidden>
-                      {plugin.manifest.icon || '•'}
-                    </span>
-                    <span className="launcher__name">{plugin.manifest.name}</span>
-                    <span className="launcher__desc">{plugin.manifest.description}</span>
-                  </button>
+                  <div key={plugin.manifest.id} className="launcher__tile">
+                    <button
+                      type="button"
+                      className="launcher__tile-main"
+                      onClick={() => openTool(plugin, false)}
+                      disabled={isOpening}
+                      title={plugin.manifest.description}
+                    >
+                      <span className="launcher__icon" aria-hidden>
+                        <Icon size={32} strokeWidth={1.75} />
+                      </span>
+                      <span className="launcher__name">{plugin.manifest.name}</span>
+                      <span className="launcher__desc">{plugin.manifest.description}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="launcher__tile-ephemeral"
+                      onClick={() => openTool(plugin, true)}
+                      disabled={isOpening}
+                      title="即用即走：打开后失焦自动关闭"
+                      aria-label="即用即走打开"
+                    >
+                      <Zap size={14} strokeWidth={2} aria-hidden />
+                    </button>
+                  </div>
                 );
               })}
             </div>

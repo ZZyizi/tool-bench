@@ -8,7 +8,7 @@ export interface PluginManifest {
   description: string;
   author: string;
   category: string;
-  icon?: string;
+  icon?: ComponentType;
   entry: string;
   capabilities?: string[];
   windowWidth?: number;
