@@ -1,22 +1,30 @@
-/* Outer wrapper that fills the frameless window and is the drag-handle.
-   Padding here creates breathing room so the inner card's box-shadow is
-   fully visible without being clipped at the window edges. */
+/* Outer wrapper that fills the frameless window. The 6px padding creates
+   breathing room so the inner card's box-shadow is fully visible at the
+   window edges, and also acts as the visual drag handle: a pointerdown
+   on the padding (or anywhere that is not a `qs__no-drag` element) calls
+   Tauri 2's `startDragging()`, which fires the Tauri-native `Moved` event
+   on every drag step. That `Moved` keeps the window's blur grace period
+   alive, so the spurious post-drag blur from webview2 does not close the
+   window. (We deliberately do NOT use `-webkit-app-region: drag` here —
+   the webkit drag path bypasses Tauri's `Moved` events, so the grace
+   would never apply and dragging would close the window.) */
 .qs-drag-root {
   height: 100vh;
   padding: 6px;
   box-sizing: border-box;
   background: transparent;
-  -webkit-app-region: drag;
   -webkit-font-smoothing: antialiased;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: var(--fg);
   font-size: 14px;
   overflow: hidden;
   display: flex;
+  user-select: none;
 }
 
 .qs__no-drag {
-  -webkit-app-region: no-drag;
+  /* Marker class: pointerdown handlers skip these elements so they remain
+     clickable. Not a CSS region any more (see comment above). */
 }
 
 /* The visual card. box-sizing: border-box is critical: with content-box,
@@ -218,11 +226,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   padding: 20px;
   color: var(--fg-muted);
   font-size: 12.5px;
   width: 100%;
   height: 100%;
+}
+
+.qs__hint-icon {
+  color: var(--fg-muted);
+  flex-shrink: 0;
 }
 
 .qs__error {

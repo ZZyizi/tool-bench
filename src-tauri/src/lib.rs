@@ -50,6 +50,7 @@ pub fn run() {
             cmd::capabilities::list_capabilities,
             cmd::windows::open_tool_window,
             cmd::windows::set_close_behavior,
+            cmd::windows::close_tool_window,
             cmd::apps::list_installed_apps,
             cmd::apps::launch_app,
             cmd::pinned::get_pinned_apps,

@@ -3,50 +3,28 @@ import { Box, Pin, PinOff, Search, X, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { api } from '../plugins/api';
 import { globalRegistry } from '../plugins/registry';
 import { useSettings } from '../settings';
-import type { InstalledApp } from '../types';
 import './QuickSwitcher.css';
 
-type Item =
-  | {
-      kind: 'tool';
-      id: string;
-      name: string;
-      description: string;
-      icon: LucideIcon;
-      pluginId: string;
-    }
-  | {
-      kind: 'app';
-      id: string;
-      name: string;
-      target: string;
-      icon: LucideIcon;
-    };
+type Item = {
+  id: string;
+  name: string;
+  description: string;
+  icon: LucideIcon;
+  pluginId: string;
+};
 
 const TOOL_PREFIX = 'tool:';
 const CELL_PX = 96; // width of one cell — keep in sync with .qs__cell CSS
 
 function buildToolItems(): Item[] {
   return globalRegistry.list().map((plugin) => ({
-    kind: 'tool' as const,
     id: `${TOOL_PREFIX}${plugin.manifest.id}`,
     pluginId: plugin.manifest.id,
     name: plugin.manifest.name,
     description: plugin.manifest.description,
     icon: (plugin.manifest.icon ?? Box) as LucideIcon,
-  }));
-}
-
-function buildAppItems(apps: InstalledApp[]): Item[] {
-  return apps.map((app) => ({
-    kind: 'app' as const,
-    id: app.id,
-    name: app.name,
-    target: app.target,
-    icon: Box,
   }));
 }
 
@@ -65,7 +43,6 @@ export function QuickSwitcher() {
   const [settings, setSettings] = useSettings();
   const [query, setQuery] = useState('');
   const [toolItems] = useState<Item[]>(() => buildToolItems());
-  const [installedApps, setInstalledApps] = useState<InstalledApp[] | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [colCount, setColCount] = useState(1);
   const [error, setError] = useState<string | null>(null);
@@ -79,26 +56,6 @@ export function QuickSwitcher() {
     inputRef.current?.focus();
   }, []);
 
-  // Lazy-scan installed apps on first use. The quick-switcher is the
-  // entrypoint for the user, so we don't pay the cost at app startup.
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .listInstalledApps()
-      .then((result) => {
-        if (cancelled) return;
-        setInstalledApps(result.apps);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(String(e));
-        setInstalledApps([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   // Track the grid's actual width so keyboard navigation can convert
   // a 1-D index into (row, col) correctly. The grid uses `auto-fill` so the
   // column count depends on the current window width.
@@ -107,7 +64,6 @@ export function QuickSwitcher() {
     if (!el) return;
     const ro = new ResizeObserver(([entry]) => {
       const w = entry.contentRect.width;
-      // Subtract the inline gap (4px) by floor() on (w + gap) / (cell + gap).
       setColCount(Math.max(1, Math.floor((w + 4) / CELL_PX)));
     });
     ro.observe(el);
@@ -116,25 +72,22 @@ export function QuickSwitcher() {
 
   // Build the visible list. When the search box is empty, show pinned items
   // in their pinned order. When non-empty, replace the view with search
-  // results across both tools and installed apps, ranked by score.
+  // results across the registered tools, ranked by score.
   const visible: Item[] = useMemo(() => {
-    const appItems = installedApps ? buildAppItems(installedApps) : [];
     if (query.trim() === '') {
-      const pinnedById = new Map<string, Item>();
-      for (const t of toolItems) pinnedById.set(t.id, t);
-      for (const a of appItems) pinnedById.set(a.id, a);
+      const byId = new Map<string, Item>();
+      for (const t of toolItems) byId.set(t.id, t);
       return settings.pinnedApps
-        .map((id) => pinnedById.get(id))
+        .map((id) => byId.get(id))
         .filter((x): x is Item => Boolean(x));
     }
     const q = query.trim();
-    const candidates = [...toolItems, ...appItems];
-    const scored = candidates
+    const scored = toolItems
       .map((item) => ({ item, s: score(q, item.name) }))
       .filter((x) => x.s !== Number.POSITIVE_INFINITY)
       .sort((a, b) => a.s - b.s);
     return scored.slice(0, 64).map((x) => x.item);
-  }, [query, toolItems, installedApps, settings.pinnedApps]);
+  }, [query, toolItems, settings.pinnedApps]);
 
   // Reset the active index whenever the visible list changes shape.
   useEffect(() => {
@@ -153,19 +106,15 @@ export function QuickSwitcher() {
     async (item: Item, useAndGo: boolean) => {
       setError(null);
       try {
-        if (item.kind === 'tool') {
-          const plugin = globalRegistry.get(item.pluginId);
-          if (!plugin) throw new Error(`tool "${item.pluginId}" not registered`);
-          await invoke('open_tool_window', {
-            pluginId: item.pluginId,
-            title: plugin.manifest.name,
-            width: plugin.manifest.windowWidth ?? null,
-            height: plugin.manifest.windowHeight ?? null,
-            useAndGo,
-          });
-        } else {
-          await api.launchApp(item.target);
-        }
+        const plugin = globalRegistry.get(item.pluginId);
+        if (!plugin) throw new Error(`tool "${item.pluginId}" not registered`);
+        await invoke('open_tool_window', {
+          pluginId: item.pluginId,
+          title: plugin.manifest.name,
+          width: plugin.manifest.windowWidth ?? null,
+          height: plugin.manifest.windowHeight ?? null,
+          useAndGo,
+        });
         if (useAndGo) {
           await closeWindow();
         }
@@ -264,7 +213,7 @@ export function QuickSwitcher() {
           onKeyDown={onKeyDown}
           placeholder={
             query.trim() === ''
-              ? '搜索应用或工具...  (↑↓←→ 移动 · Enter 打开 · Esc 关闭)'
+              ? '搜索工具...  (↑↓←→ 移动 · Enter 打开 · Esc 关闭)'
               : '输入中...  (✕ 清空恢复已固定)'
           }
           spellCheck={false}
@@ -298,13 +247,7 @@ export function QuickSwitcher() {
                   aria-selected={active}
                   tabIndex={-1}
                   onMouseEnter={() => setActiveIndex(i)}
-                  onClick={(e) => {
-                    // Clicks on the action buttons are caught by their own
-                    // onClick + stopPropagation, so a click on the cell body
-                    // here means "open this item".
-                    if (e.defaultPrevented) return;
-                    void launchItem(item, false);
-                  }}
+                  onClick={() => void launchItem(item, false)}
                 >
                   <div className="qs__cell-actions">
                     <button
@@ -343,9 +286,12 @@ export function QuickSwitcher() {
             })}
           </div>
         ) : showNoMatch ? (
-          <div className="qs__hint">没有匹配的结果</div>
+          <div className="qs__hint">没有匹配的工具</div>
         ) : showEmptyHint ? (
-          <div className="qs__hint">还没有固定任何项。搜索一个结果后用 📌 固定。</div>
+          <div className="qs__hint">
+            <Pin size={14} className="qs__hint-icon" aria-hidden />
+            <span>还没有固定任何工具。搜索后用 Pin 图标固定。</span>
+          </div>
         ) : null}
       </div>
 

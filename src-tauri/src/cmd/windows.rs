@@ -90,3 +90,12 @@ pub fn set_close_behavior(
     state.store(value, Ordering::Relaxed);
     Ok(())
 }
+
+#[tauri::command]
+pub fn close_tool_window(app: AppHandle, plugin_id: String) -> Result<(), String> {
+    let label = format!("tool-{}", plugin_id);
+    if let Some(w) = app.get_webview_window(&label) {
+        w.close().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}

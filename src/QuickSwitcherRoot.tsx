@@ -1,21 +1,33 @@
 import { useEffect, useRef } from 'react';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { QuickSwitcher } from './components/QuickSwitcher';
 
 export function QuickSwitcherRoot() {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Tauri honors `-webkit-app-region: drag` on frameless windows. Apply it
-  // to the chrome (everywhere except interactive controls) by walking the
-  // descendants of the QuickSwitcher: the input and the action buttons
-  // opt out via the `qs__no-drag` class.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    el.classList.add('qs-drag-root');
-    const stops = el.querySelectorAll<HTMLElement>(
-      'input, button, .qs__item--active, .qs__pin, .qs__clear, .qs__hint',
-    );
-    stops.forEach((node) => node.classList.add('qs__no-drag'));
+
+    // Pointerdown starts a Tauri-native drag only when the press lands on
+    // the chrome (the qs-drag-root or the qs card itself), not on an
+    // interactive element. Using Tauri 2's `startDragging()` instead of
+    // `-webkit-app-region: drag` is what keeps the drag-aware blur grace
+    // in the Rust listener working — the webkit region would route drag
+    // through a different path that doesn't emit `Moved` events.
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && target.closest('.qs__no-drag')) return;
+      // Avoid double-handling when the user clicks an element that already
+      // captures the pointer for its own logic.
+      e.preventDefault();
+      void getCurrentWebviewWindow().startDragging();
+    };
+
+    el.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      el.removeEventListener('pointerdown', onPointerDown);
+    };
   }, []);
 
   return (

@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { globalRegistry } from './plugins/registry';
 import './plugins/builtin';
@@ -22,6 +23,25 @@ export function ToolWindowRoot({ pluginId: propId }: ToolWindowRootProps = {}) {
     if (fromLabel.startsWith('tool-')) return fromLabel.slice('tool-'.length);
     return readPluginIdFromUrl();
   }, [propId]);
+
+  // Esc closes the tool window (mirrors the QuickSwitcher behavior). The
+  // listener uses the capture phase and a plain `event.key === 'Escape'`
+  // check so it works regardless of where focus is inside the tool view —
+  // an input field's Esc won't normally bubble, but capture-phase keydown
+  // fires on the way down to the target.
+  useEffect(() => {
+    if (!pluginId) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        invoke('close_tool_window', { pluginId }).catch((err) => {
+          console.error('[tool-window] close on Esc failed', err);
+        });
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [pluginId]);
 
   const plugin = pluginId ? globalRegistry.get(pluginId) : undefined;
   const Component = plugin?.Component;
