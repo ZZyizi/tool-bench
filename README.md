@@ -1,4 +1,4 @@
-# DevToolkit
+# toolBench
 
 > 面向开发者的轻量级桌面工具箱 —— 小而美、开箱即用、离线运行、可扩展。
 > 当前的代码包名：`tool-bench`（Rust crate 名：`toolBench`）。
@@ -15,7 +15,7 @@
 
 ## 项目简介
 
-**DevToolkit** 是一款使用 **Tauri 2 + React 19 + TypeScript 5.8 + Vite 7** 构建的跨平台桌面工具箱，专注于解决开发者在日常工作中高频但繁琐的小问题。
+**toolBench** 是一款使用 **Tauri 2 + React 19 + TypeScript 5.8 + Vite 7** 构建的跨平台桌面工具箱，专注于解决开发者在日常工作中高频但繁琐的小问题。
 
 核心理念：
 
@@ -299,7 +299,3 @@ npm run tauri dev
 - **Tauri 2 文档**：https://tauri.app/develop/
 
 ---
-
-## 许可证
-
-待定。
