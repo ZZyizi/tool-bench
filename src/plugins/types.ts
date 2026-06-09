@@ -11,6 +11,8 @@ export interface PluginManifest {
   icon?: string;
   entry: string;
   capabilities?: string[];
+  windowWidth?: number;
+  windowHeight?: number;
 }
 
 export interface PluginContext {
