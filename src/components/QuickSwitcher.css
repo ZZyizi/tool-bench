@@ -1,6 +1,10 @@
-/* Outer wrapper that fills the frameless window. Uses -webkit-app-region
-   to let the user drag the window by the padding area. Interactive elements
-   inside the card use -webkit-app-region: no-drag so clicks pass through. */
+/* Outer wrapper that fills the frameless window. -webkit-app-region
+   splits the surface into drag / no-drag regions:
+   - drag: qs-drag-root padding, the input row (titlebar-style),
+     the result row's empty space (gaps between cells, the hint
+     text), and the error strip
+   - no-drag: the input field, the clear button, every grid cell,
+     and the pin/zap action buttons (so clicks reach them) */
 .qs-drag-root {
   height: 100vh;
   padding: 6px;
@@ -14,11 +18,6 @@
   overflow: hidden;
   display: flex;
   user-select: none;
-}
-
-.qs__no-drag {
-  /* Marker class: pointerdown handlers skip these elements so they remain
-     clickable. Not a CSS region any more (see comment above). */
 }
 
 /* The visual card. box-sizing: border-box is critical: with content-box,
@@ -71,7 +70,7 @@
   align-items: stretch;
   overflow-y: auto;
   overflow-x: hidden;
-  -webkit-app-region: no-drag;
+  -webkit-app-region: drag;
 }
 
 .qs__search-icon {
@@ -147,6 +146,7 @@
   outline-offset: -1px;
   transition: background 80ms ease, outline-color 80ms ease;
   user-select: none;
+  -webkit-app-region: no-drag;
 }
 
 .qs__cell:hover {
@@ -212,6 +212,7 @@
   cursor: pointer;
   flex-shrink: 0;
   transition: color 80ms ease, border-color 80ms ease, background 80ms ease;
+  -webkit-app-region: no-drag;
 }
 
 .qs__cell-action:hover {
@@ -244,4 +245,5 @@
   background: rgba(255, 85, 85, 0.08);
   border-top: 1px solid var(--border);
   flex-shrink: 0;
+  -webkit-app-region: drag;
 }
