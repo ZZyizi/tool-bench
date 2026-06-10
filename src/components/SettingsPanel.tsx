@@ -239,8 +239,9 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
         <section className="settings-panel__section">
           <h4 className="settings-panel__section-title">全局快捷键</h4>
           <p className="settings-panel__section-desc">
-            设置打开快速启动面板的全局快捷键。点击下方按钮，然后按下你想要的组合键。
+            设置打开快速启动面板的全局快捷键。注意：Alt+Space 可能会被 Windows 系统拦截，建议使用 Ctrl+Space 或其他组合。
           </p>
+          <label className="settings-panel__shortcut-label">快速启动快捷键</label>
           <ShortcutRecorder
             value={settings.quickLaunchShortcut}
             onChange={(shortcut) => setSettings({ ...settings, quickLaunchShortcut: shortcut })}

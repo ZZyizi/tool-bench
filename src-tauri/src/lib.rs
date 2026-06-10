@@ -1,5 +1,7 @@
 pub mod cmd;
 pub mod platform;
+#[cfg(windows)]
+pub mod windows_hook;
 
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU8;
@@ -41,6 +43,8 @@ pub fn run() {
 
             build_tray(app)?;
             install_main_window_close_handler(app, close_behavior.clone());
+            #[cfg(windows)]
+            windows_hook::install(app.handle());
             quick_switcher::precreate(app.handle());
             Ok(())
         })

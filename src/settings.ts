@@ -18,7 +18,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   mode: 'desktop',
   closeBehavior: 'hide',
   pinnedApps: [],
-  quickLaunchShortcut: 'Alt+Space',
+  quickLaunchShortcut: 'Ctrl+Space',
 };
 
 type Setter = (next: AppSettings) => void;

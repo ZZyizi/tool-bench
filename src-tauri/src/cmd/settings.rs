@@ -23,7 +23,7 @@ pub struct AppSettings {
 }
 
 fn default_shortcut() -> String {
-    "Alt+Space".to_string()
+    "Ctrl+Space".to_string()
 }
 
 impl Default for AppSettings {
@@ -32,7 +32,7 @@ impl Default for AppSettings {
             mode: "desktop".to_string(),
             close_behavior: "hide".to_string(),
             pinned_apps: Vec::new(),
-            quick_launch_shortcut: "Alt+Space".to_string(),
+            quick_launch_shortcut: "Ctrl+Space".to_string(),
         }
     }
 }
@@ -173,7 +173,7 @@ mod tests {
         assert_eq!(s.mode, "desktop");
         assert_eq!(s.close_behavior, "hide");
         assert!(s.pinned_apps.is_empty());
-        assert_eq!(s.quick_launch_shortcut, "Alt+Space");
+        assert_eq!(s.quick_launch_shortcut, "Ctrl+Space");
     }
 
     #[test]

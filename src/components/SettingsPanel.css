@@ -136,6 +136,14 @@
   line-height: 1.4;
 }
 
+.settings-panel__shortcut-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
 .settings-panel__shortcut-btn {
   display: flex;
   align-items: center;
