@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Box, Search, Settings, Zap, type LucideIcon } from 'lucide-react';
 import { globalRegistry } from '../plugins/registry';
+import { useSettings } from '../settings';
 import type { Plugin } from '../plugins/types';
 import './Launcher.css';
 
@@ -10,6 +11,7 @@ interface LauncherProps {
 }
 
 export function Launcher({ onOpenSettings }: LauncherProps) {
+  const [settings] = useSettings();
   const [opening, setOpening] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const grouped = globalRegistry.byCategory();
@@ -51,12 +53,12 @@ export function Launcher({ onOpenSettings }: LauncherProps) {
             type="button"
             className="launcher__qs-btn"
             onClick={openQuickSwitcher}
-            title="快速启动 (Alt+Space)"
+            title={`快速启动 (${settings.quickLaunchShortcut})`}
             aria-label="打开快速启动"
           >
             <Search size={16} aria-hidden />
             <span>快速启动</span>
-            <kbd className="launcher__kbd">Alt+Space</kbd>
+            <kbd className="launcher__kbd">{settings.quickLaunchShortcut}</kbd>
           </button>
           <button
             type="button"

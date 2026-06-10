@@ -8,9 +8,7 @@ use std::sync::Arc;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, WindowEvent};
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
-
-use crate::cmd::pinned::{default_pinned_path, PinnedStore};
+use crate::cmd::settings::{default_settings_path, SettingsStore};
 use crate::cmd::quick_switcher;
 use crate::cmd::windows::CLOSE_HIDE;
 use crate::platform::port_scanner::PortScanner;
@@ -31,17 +29,19 @@ pub fn run() {
         })
         .manage(close_behavior.clone())
         .setup(move |app| {
-            let pinned_path: PathBuf = default_pinned_path(&app.handle()).unwrap_or_else(|_| {
-                std::env::temp_dir().join("toolBench").join("pinned.json")
+            let settings_path: PathBuf = default_settings_path(&app.handle()).unwrap_or_else(|_| {
+                std::env::temp_dir().join("toolBench").join("settings.json")
             });
-            app.manage(PinnedStore::new(pinned_path));
+            app.manage(SettingsStore::new(settings_path));
+
+            // Load settings and apply the saved shortcut & close behavior
+            if let Err(e) = cmd::settings::apply_shortcut_from_settings(app.handle()) {
+                eprintln!("[toolBench] failed to register global shortcut: {e}");
+            }
 
             build_tray(app)?;
             install_main_window_close_handler(app, close_behavior.clone());
             quick_switcher::precreate(app.handle());
-            if let Err(e) = register_global_shortcut(app.handle()) {
-                eprintln!("[toolBench] failed to register Alt+Space shortcut: {e}");
-            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -50,13 +50,12 @@ pub fn run() {
             cmd::ports::kill_by_process_name,
             cmd::capabilities::list_capabilities,
             cmd::windows::open_tool_window,
-            cmd::windows::set_close_behavior,
             cmd::windows::close_tool_window,
             cmd::apps::list_installed_apps,
             cmd::apps::launch_app,
-            cmd::pinned::get_pinned_apps,
-            cmd::pinned::set_pinned_apps,
             cmd::quick_switcher::open_quick_switcher,
+            cmd::settings::get_settings,
+            cmd::settings::set_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -116,18 +115,6 @@ fn build_tray(app: &mut tauri::App) -> tauri::Result<()> {
             }
         })
         .build(app)?;
-    Ok(())
-}
-
-fn register_global_shortcut(app: &tauri::AppHandle) -> Result<(), tauri_plugin_global_shortcut::Error> {
-    let shortcut = Shortcut::new(Some(Modifiers::ALT), Code::Space);
-    let app_handle = app.clone();
-    app.global_shortcut()
-        .on_shortcut(shortcut, move |_app, _shortcut, event| {
-            if event.state() == ShortcutState::Pressed {
-                let _ = quick_switcher::open_quick_switcher(app_handle.clone());
-            }
-        })?;
     Ok(())
 }
 

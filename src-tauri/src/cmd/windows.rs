@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -78,19 +78,6 @@ pub async fn open_tool_window(
         });
     }
 
-    Ok(())
-}
-
-#[tauri::command]
-pub fn set_close_behavior(
-    state: tauri::State<'_, Arc<AtomicU8>>,
-    behavior: String,
-) -> Result<(), String> {
-    let value = match behavior.as_str() {
-        "hide" => CLOSE_HIDE,
-        _ => CLOSE_QUIT,
-    };
-    state.store(value, Ordering::Relaxed);
     Ok(())
 }
 
