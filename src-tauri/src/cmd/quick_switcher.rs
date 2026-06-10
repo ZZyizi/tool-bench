@@ -71,6 +71,13 @@ fn build_qs_window(app: &AppHandle, show: bool) -> Result<(), String> {
     builder = builder.visible(false);
     let window = builder.build().map_err(|e| e.to_string())?;
 
+    // Swallow Alt+Space-triggered system menu on this window. Same mechanism
+    // as the main window — see `windows_hook::subclass`.
+    #[cfg(windows)]
+    if let Ok(hwnd) = window.hwnd() {
+        crate::windows_hook::subclass(hwnd.0 as isize);
+    }
+
     let blur_app = app.clone();
     let last_show = Arc::new(Mutex::new(Instant::now() - SHOW_GRACE * 2));
     let last_show_for_closure = last_show.clone();

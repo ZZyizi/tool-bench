@@ -47,6 +47,15 @@ const LLKHF_ALTDOWN: u32 = 0x20;
 /// `SetWindowLongPtrW` index for the window procedure pointer.
 const GWLP_WNDPROC: i32 = -4;
 
+/// `SetWindowLongPtrW` index for the window style bits.
+const GWL_STYLE: i32 = -16;
+
+/// `WS_SYSMENU` — having this style bit is what makes a window respond to
+/// Alt+Space by opening the system menu. Stripping it makes Alt+Space a no-op
+/// for that window. Safe for decoration-less windows (quick switcher) where
+/// the user can't see / interact with the system menu anyway.
+const WS_SYSMENU: isize = 0x00080000;
+
 #[repr(C)]
 struct KBDLLHOOKSTRUCT {
     vk_code: u32,
@@ -65,6 +74,7 @@ extern "system" {
     ) -> isize;
     fn CallNextHookEx(hhk: isize, n_code: i32, w_param: usize, l_param: isize) -> isize;
     fn GetModuleHandleW(lp_module_name: *const u16) -> isize;
+    fn GetWindowLongPtrW(hwnd: isize, n_index: i32) -> isize;
     fn SetWindowLongPtrW(hwnd: isize, n_index: i32, dw_new_long: isize) -> isize;
     fn CallWindowProcW(
         prev_wnd_func: isize,
@@ -73,23 +83,64 @@ extern "system" {
         w_param: usize,
         l_param: isize,
     ) -> isize;
+    fn SetPropW(hwnd: isize, lp_string: *const u16, h_data: isize) -> i32;
+    fn GetPropW(hwnd: isize, lp_string: *const u16) -> isize;
 }
 
 type HOOKPROC = unsafe extern "system" fn(i32, usize, isize) -> isize;
 
 /// 0 means "not installed".
 static HOOK_HANDLE: AtomicIsize = AtomicIsize::new(0);
-static ORIG_WNDPROC: AtomicIsize = AtomicIsize::new(0);
 
 /// Only log the FIRST intercept of each path to avoid spamming stderr (which
 /// could starve the LL hook of its timing budget).
 static LOGGED_LL_INTERCEPT: AtomicBool = AtomicBool::new(false);
 static LOGGED_SC_INTERCEPT: AtomicBool = AtomicBool::new(false);
 
+/// When `false`, the hook & subclass let Alt+Space through so the settings UI
+/// can capture it for shortcut recording. Set via [`set_suppress`].
+static SUPPRESS: AtomicBool = AtomicBool::new(true);
+
+/// Wide-string key under which the original `WNDPROC` for each subclassed
+/// HWND is stored via `SetPropW`. Lets a single `subclass_proc` serve many
+/// windows — it looks up the per-HWND original procedure on each message.
+const ORIG_PROP: &[u16] = &[
+    b'T' as u16,
+    b'o' as u16,
+    b'o' as u16,
+    b'l' as u16,
+    b'B' as u16,
+    b'e' as u16,
+    b'n' as u16,
+    b'c' as u16,
+    b'h' as u16,
+    b'O' as u16,
+    b'r' as u16,
+    b'i' as u16,
+    b'g' as u16,
+    b'W' as u16,
+    b'n' as u16,
+    b'd' as u16,
+    b'P' as u16,
+    b'r' as u16,
+    b'o' as u16,
+    b'c' as u16,
+    0,
+];
+
+/// Toggle whether Alt+Space gets swallowed. Pass `false` while the user is
+/// recording a new shortcut so the keystroke can reach the webview.
+pub fn set_suppress(enabled: bool) {
+    SUPPRESS.store(enabled, Ordering::Relaxed);
+}
+
 unsafe extern "system" fn keyboard_proc(n_code: i32, w_param: usize, l_param: isize) -> isize {
     if n_code == HC_ACTION && w_param == WM_SYSKEYDOWN as usize {
         let kb = &*(l_param as *const KBDLLHOOKSTRUCT);
-        if kb.vk_code == VK_SPACE && (kb.flags & LLKHF_ALTDOWN) != 0 {
+        if kb.vk_code == VK_SPACE
+            && (kb.flags & LLKHF_ALTDOWN) != 0
+            && SUPPRESS.load(Ordering::Relaxed)
+        {
             if !LOGGED_LL_INTERCEPT.swap(true, Ordering::Relaxed) {
                 eprintln!("[windows_hook] swallowed Alt+Space via WH_KEYBOARD_LL");
             }
@@ -106,24 +157,37 @@ unsafe extern "system" fn subclass_proc(
     w_param: usize,
     l_param: isize,
 ) -> isize {
-    if msg == WM_SYSCOMMAND && (w_param & 0xFFF0) == SC_KEYMENU {
+    if msg == WM_SYSCOMMAND
+        && (w_param & 0xFFF0) == SC_KEYMENU
+        && SUPPRESS.load(Ordering::Relaxed)
+    {
         if !LOGGED_SC_INTERCEPT.swap(true, Ordering::Relaxed) {
-            eprintln!("[windows_hook] swallowed SC_KEYMENU via window subclass");
+            eprintln!("[windows_hook] swallowed SC_KEYMENU via window subclass HWND=0x{hwnd:x}");
         }
         return 0;
     }
-    let orig = ORIG_WNDPROC.load(Ordering::Relaxed);
+    let orig = GetPropW(hwnd, ORIG_PROP.as_ptr());
     if orig != 0 {
         CallWindowProcW(orig, hwnd, msg, w_param, l_param)
     } else {
+        // Should never happen — we only install this proc via `subclass`
+        // which sets the prop atomically. Returning 0 is the safest fallback.
         0
     }
 }
 
-/// Install both the LL keyboard hook and the window subclass.
+/// Install both the LL keyboard hook and a subclass on the main window.
+/// Additional windows (quick switcher, tool windows, ...) should call
+/// [`subclass`] themselves right after they're created.
 pub fn install(app: &AppHandle) {
     install_ll_hook();
-    install_window_subclass(app);
+    if let Some(window) = app.get_webview_window("main") {
+        if let Ok(hwnd) = window.hwnd() {
+            subclass(hwnd.0 as isize);
+        }
+    } else {
+        eprintln!("[windows_hook] main window not found at install time");
+    }
 }
 
 fn install_ll_hook() {
@@ -144,29 +208,52 @@ fn install_ll_hook() {
     }
 }
 
-fn install_window_subclass(app: &AppHandle) {
-    let Some(window) = app.get_webview_window("main") else {
-        eprintln!("[windows_hook] subclass: main window not found");
-        return;
-    };
-    let hwnd = match window.hwnd() {
-        Ok(h) => h.0 as isize,
-        Err(e) => {
-            eprintln!("[windows_hook] subclass: failed to get HWND: {e}");
-            return;
-        }
-    };
+/// Subclass an arbitrary HWND so its `WM_SYSCOMMAND` / `SC_KEYMENU`
+/// (Alt+Space-triggered system menu) gets swallowed. Idempotent — a second
+/// call for the same HWND is a no-op.
+pub fn subclass(hwnd: isize) {
     if hwnd == 0 {
-        eprintln!("[windows_hook] subclass: HWND is null");
         return;
     }
     unsafe {
+        // Already subclassed by us? Then bail.
+        if GetPropW(hwnd, ORIG_PROP.as_ptr()) != 0 {
+            return;
+        }
         let orig = SetWindowLongPtrW(hwnd, GWLP_WNDPROC, subclass_proc as *const () as isize);
-        if orig != 0 {
-            ORIG_WNDPROC.store(orig, Ordering::Relaxed);
-            eprintln!("[windows_hook] subclassed main window HWND=0x{hwnd:x}");
-        } else {
-            eprintln!("[windows_hook] SetWindowLongPtrW returned 0");
+        if orig == 0 {
+            eprintln!("[windows_hook] subclass: SetWindowLongPtrW returned 0 for HWND=0x{hwnd:x}");
+            return;
+        }
+        // Stash the original wndproc on the window itself so `subclass_proc`
+        // can find it via `GetPropW` (lets the same proc serve many HWNDs).
+        if SetPropW(hwnd, ORIG_PROP.as_ptr(), orig) == 0 {
+            eprintln!("[windows_hook] subclass: SetPropW failed for HWND=0x{hwnd:x}");
+            // Restore — better to leak the subclass than to lose the orig.
+            SetWindowLongPtrW(hwnd, GWLP_WNDPROC, orig);
+            return;
+        }
+        eprintln!("[windows_hook] subclassed HWND=0x{hwnd:x}");
+    }
+}
+
+/// Strip `WS_SYSMENU` from a window so Alt+Space stops opening the system
+/// menu for it. Only safe for windows that are decoration-less or otherwise
+/// don't need a system menu. Less reliable than [`subclass`] — some window
+/// toolkits (e.g. Tao) reset window styles after creation, so a freshly
+/// stripped HWND may grow `WS_SYSMENU` back. Prefer [`subclass`].
+pub fn disable_sysmenu(hwnd: isize) {
+    if hwnd == 0 {
+        return;
+    }
+    unsafe {
+        let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+        if style == 0 {
+            return;
+        }
+        if (style & WS_SYSMENU) != 0 {
+            SetWindowLongPtrW(hwnd, GWL_STYLE, style & !WS_SYSMENU);
+            eprintln!("[windows_hook] WS_SYSMENU stripped from HWND=0x{hwnd:x}");
         }
     }
 }

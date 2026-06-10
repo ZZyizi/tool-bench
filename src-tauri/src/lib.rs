@@ -60,6 +60,7 @@ pub fn run() {
             cmd::quick_switcher::open_quick_switcher,
             cmd::settings::get_settings,
             cmd::settings::set_settings,
+            cmd::settings::set_recording_mode,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { useSettings, type AppMode, type CloseBehavior } from '../settings';
 import './SettingsPanel.css';
 
@@ -50,9 +51,46 @@ function formatKeyDisplay(code: string): string {
   return code;
 }
 
+/** Map `KeyboardEvent.code` → the token tauri's Shortcut parser accepts. */
+function codeToShortcutToken(code: string): string | null {
+  if (code.startsWith('Key')) return code.slice(3);
+  if (code.startsWith('Digit')) return code.slice(5);
+  // Tauri's parser uses the literal name for these.
+  if (code === 'Space') return 'Space';
+  if (code === 'Enter') return 'Enter';
+  if (code === 'Tab') return 'Tab';
+  if (code === 'Backspace') return 'Backspace';
+  if (code === 'Delete') return 'Delete';
+  if (code === 'Insert') return 'Insert';
+  if (code === 'Home') return 'Home';
+  if (code === 'End') return 'End';
+  if (code === 'PageUp') return 'PageUp';
+  if (code === 'PageDown') return 'PageDown';
+  if (code === 'ArrowUp') return 'Up';
+  if (code === 'ArrowDown') return 'Down';
+  if (code === 'ArrowLeft') return 'Left';
+  if (code === 'ArrowRight') return 'Right';
+  if (code === 'Escape') return 'Escape';
+  if (code.startsWith('F') && /^F\d{1,2}$/.test(code)) return code;
+  // Unknown / unsupported — caller decides what to do.
+  return null;
+}
+
+const MODIFIER_KEYS = new Set([
+  'Control',
+  'Alt',
+  'AltGraph',
+  'Shift',
+  'Meta',
+  'OS',
+]);
+
 /**
- * A small button that toggles into "recording" mode, captures a key combo,
- * and calls `onChange` with a Shortcut-parser-compatible string.
+ * A button that toggles into "recording" mode and captures a key combo via a
+ * window-level keydown listener. We can't use the button's own `onKeyDown`
+ * because pressing Space on a focused button triggers the browser's native
+ * activation handling and steals the event — that's why Space couldn't be
+ * bound before.
  */
 function ShortcutRecorder({
   value,
@@ -63,63 +101,91 @@ function ShortcutRecorder({
 }) {
   const [recording, setRecording] = useState(false);
   const [pending, setPending] = useState('');
-  const btnRef = useRef<HTMLButtonElement>(null);
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (e.key === 'Escape') {
-      setRecording(false);
-      setPending('');
-      return;
-    }
-
-    const parts: string[] = [];
-    if (e.ctrlKey) parts.push('Ctrl');
-    if (e.altKey) parts.push('Alt');
-    if (e.shiftKey) parts.push('Shift');
-    if (e.metaKey) parts.push('Meta');
-
-    const modKeys = new Set(['Control', 'Alt', 'Shift', 'Meta']);
-    if (modKeys.has(e.key)) {
-      // Only modifiers pressed so far — show preview
-      setPending(parts.join('+') + '+');
-      return;
-    }
-
-    // Must have at least one modifier
-    if (parts.length === 0) return;
-
-    parts.push(e.code);
-    const shortcut = parts.join('+');
-    onChange(shortcut);
-    setRecording(false);
-    setPending('');
-  };
 
   useEffect(() => {
-    if (recording) {
-      btnRef.current?.focus();
-    }
-  }, [recording]);
+    if (!recording) return;
+
+    // Tell the backend to step aside: unregister global shortcuts and stop
+    // swallowing Alt+Space. Otherwise Ctrl+Space / Alt+Space never reach
+    // this window.
+    invoke('set_recording_mode', { recording: true }).catch((err) => {
+      console.error('[shortcut] failed to enter recording mode', err);
+    });
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Stop the event from reaching the focused button (or anything else).
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (e.key === 'Escape') {
+        setRecording(false);
+        setPending('');
+        return;
+      }
+
+      const modifiers: string[] = [];
+      if (e.ctrlKey) modifiers.push('Ctrl');
+      if (e.altKey) modifiers.push('Alt');
+      if (e.shiftKey) modifiers.push('Shift');
+      if (e.metaKey) modifiers.push('Super');
+
+      // Modifier-only keystroke — show a preview but don't commit yet.
+      if (MODIFIER_KEYS.has(e.key)) {
+        setPending(modifiers.length ? modifiers.join('+') + '+' : '');
+        return;
+      }
+
+      // Must have at least one modifier — a bare Space (or letter) would
+      // hijack typing globally.
+      if (modifiers.length === 0) {
+        setPending('需要先按下 Ctrl / Alt / Shift / Win');
+        return;
+      }
+
+      const token = codeToShortcutToken(e.code);
+      if (!token) {
+        setPending(`不支持的键: ${e.code}`);
+        return;
+      }
+
+      const shortcut = [...modifiers, token].join('+');
+      onChange(shortcut);
+      setRecording(false);
+      setPending('');
+    };
+
+    // `capture: true` so we beat any other handler (including the
+    // settings-panel Escape handler).
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
+      // Restore: re-register the saved shortcut and re-enable Alt+Space
+      // suppression. set_settings (called from onChange→useSettings) also
+      // re-registers, so this is safe to invoke either way.
+      invoke('set_recording_mode', { recording: false }).catch((err) => {
+        console.error('[shortcut] failed to exit recording mode', err);
+      });
+    };
+  }, [recording, onChange]);
 
   if (recording) {
     return (
       <button
         type="button"
         className="settings-panel__shortcut-btn settings-panel__shortcut-btn--recording"
-        ref={btnRef}
-        onKeyDown={handleKeyDown}
-        onBlur={() => { setRecording(false); setPending(''); }}
-        tabIndex={0}
+        onClick={(e) => {
+          e.preventDefault();
+          setRecording(false);
+          setPending('');
+        }}
+        tabIndex={-1}
       >
-        {pending || '按下快捷键...'}
+        {pending || '按下快捷键...(Esc 取消)'}
       </button>
     );
   }
 
-  // Build a display-friendly version of the stored shortcut
+  // Build a display-friendly version of the stored shortcut.
   const displayValue = value
     .split('+')
     .map((part, i, arr) => (i === arr.length - 1 ? formatKeyDisplay(part) : part))

@@ -141,6 +141,34 @@ pub fn apply_shortcut_from_settings(app: &tauri::AppHandle) -> Result<(), String
     apply_shortcut(app, &settings.quick_launch_shortcut)
 }
 
+/// Toggle "shortcut recording" mode.
+///
+/// While recording:
+/// - unregister all global shortcuts so combos like Ctrl+Space reach the webview
+///   instead of being consumed by the global handler
+/// - on Windows, stop swallowing Alt+Space so the recorder can capture it too
+///
+/// When recording ends, re-register from saved settings and re-enable the
+/// Alt+Space suppression.
+#[tauri::command]
+pub fn set_recording_mode(app: AppHandle, recording: bool) -> Result<(), String> {
+    if recording {
+        app.global_shortcut()
+            .unregister_all()
+            .map_err(|e| e.to_string())?;
+        #[cfg(windows)]
+        crate::windows_hook::set_suppress(false);
+    } else {
+        #[cfg(windows)]
+        crate::windows_hook::set_suppress(true);
+        // Re-apply whatever shortcut is currently saved. If the user changed
+        // it during recording, set_settings already re-registered it; calling
+        // here is a no-op-ish reapply.
+        apply_shortcut_from_settings(&app)?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

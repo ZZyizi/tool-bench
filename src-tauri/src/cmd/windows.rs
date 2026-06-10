@@ -44,6 +44,13 @@ pub async fn open_tool_window(
     }
     let window = builder.build().map_err(|e| e.to_string())?;
 
+    // Swallow Alt+Space-triggered system menu on this window. Same mechanism
+    // as the main window — see `windows_hook::subclass`.
+    #[cfg(windows)]
+    if let Ok(hwnd) = window.hwnd() {
+        crate::windows_hook::subclass(hwnd.0 as isize);
+    }
+
     if use_and_go.unwrap_or(false) {
         let app_handle = app.clone();
         let label_for_event = label.clone();
