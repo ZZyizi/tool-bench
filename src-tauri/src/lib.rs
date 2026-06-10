@@ -38,6 +38,7 @@ pub fn run() {
 
             build_tray(app)?;
             install_main_window_close_handler(app, close_behavior.clone());
+            quick_switcher::precreate(app.handle());
             if let Err(e) = register_global_shortcut(app.handle()) {
                 eprintln!("[toolBench] failed to register Alt+Space shortcut: {e}");
             }

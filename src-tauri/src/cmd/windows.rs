@@ -25,7 +25,10 @@ pub async fn open_tool_window(
         existing.set_focus().map_err(|e| e.to_string())?;
         return Ok(());
     }
-    let window_title = title.unwrap_or_else(|| plugin_id.clone());
+    let mut window_title = title.unwrap_or_else(|| plugin_id.clone());
+    if use_and_go.unwrap_or(false) {
+        window_title = format!("{}-快速启动", window_title);
+    }
     let url_path = format!("index.html?plugin={}", plugin_id);
     let mut builder = WebviewWindowBuilder::new(
         &app,
