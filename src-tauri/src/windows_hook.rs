@@ -1,10 +1,14 @@
-//! Windows-only: prevent Alt+Space from opening the system menu.
+//! Windows-only: prevent Alt+Space from opening the system menu, and
+//! conditionally swallow Escape to close the quick-switcher.
 //!
 //! We install TWO complementary mechanisms because each has its own failure
 //! mode:
 //!
 //! 1. **`WH_KEYBOARD_LL`** (system-wide low-level keyboard hook): swallows
-//!    Alt+Space at the raw input layer before any window's queue sees it.
+//!    Alt+Space at the raw input layer before any window's queue sees it,
+//!    and conditionally swallows Escape to close the quick-switcher when
+//!    it has lost focus (so the focused window — typically a tool window —
+//!    doesn't intercept the keystroke for its own purposes first).
 //!    Critical: the hook proc MUST be fast. If it consistently exceeds
 //!    `LowLevelHooksTimeout` (default 300 ms), Windows silently disables it
 //!    and subsequent keystrokes bypass our filter. So we do **not** log
@@ -16,6 +20,15 @@
 //!    LL hook fails to catch Space — Alt+Space goes to the focused WebView2
 //!    child, its `DefWindowProc` posts `WM_SYSCOMMAND(SC_KEYMENU)` to the
 //!    top-level parent, and we swallow it there.
+//!
+//! ## Why a low-level hook for Escape instead of a global shortcut
+//!
+//! `tauri-plugin-global-shortcut` uses `RegisterHotKey`, which consumes
+//! the keystroke at the OS level — Escape would never reach the focused
+//! webview, so tool windows' own Escape handlers (e.g. close on Esc) would
+//! stop working. The LL hook, by contrast, can `CallNextHookEx` to let the
+//! keystroke continue through to the focused window when our condition
+//! isn't met.
 
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 
@@ -41,8 +54,14 @@ const SC_KEYMENU: usize = 0xF100;
 /// Virtual key code for the spacebar.
 const VK_SPACE: u32 = 0x20;
 
+/// Virtual key code for Escape.
+const VK_ESCAPE: u32 = 0x1B;
+
 /// `KBDLLHOOKSTRUCT::flags` bit set while the ALT key is held down.
 const LLKHF_ALTDOWN: u32 = 0x20;
+
+/// `ShowWindow` nCmdShow: hide the window and activate another.
+const SW_HIDE: i32 = 0;
 
 /// `SetWindowLongPtrW` index for the window procedure pointer.
 const GWLP_WNDPROC: i32 = -4;
@@ -85,6 +104,9 @@ extern "system" {
     ) -> isize;
     fn SetPropW(hwnd: isize, lp_string: *const u16, h_data: isize) -> i32;
     fn GetPropW(hwnd: isize, lp_string: *const u16) -> isize;
+    fn IsWindowVisible(hwnd: isize) -> i32;
+    fn GetForegroundWindow() -> isize;
+    fn ShowWindow(hwnd: isize, n_cmd_show: i32) -> i32;
 }
 
 type HOOKPROC = unsafe extern "system" fn(i32, usize, isize) -> isize;
@@ -96,10 +118,22 @@ static HOOK_HANDLE: AtomicIsize = AtomicIsize::new(0);
 /// could starve the LL hook of its timing budget).
 static LOGGED_LL_INTERCEPT: AtomicBool = AtomicBool::new(false);
 static LOGGED_SC_INTERCEPT: AtomicBool = AtomicBool::new(false);
+static LOGGED_ESC_INTERCEPT: AtomicBool = AtomicBool::new(false);
 
 /// When `false`, the hook & subclass let Alt+Space through so the settings UI
 /// can capture it for shortcut recording. Set via [`set_suppress`].
 static SUPPRESS: AtomicBool = AtomicBool::new(true);
+
+/// HWND of the pre-created quick-switcher window, or 0 if not yet known.
+/// Set by [`set_qs_hwnd`] during quick-switcher pre-creation. The LL hook
+/// reads this on every ESC to decide whether to swallow-and-hide.
+static QS_HWND: AtomicIsize = AtomicIsize::new(0);
+
+/// Record the HWND of the pre-created quick-switcher window so the LL hook
+/// can swallow Escape and hide it even when QS has lost focus. Idempotent.
+pub fn set_qs_hwnd(hwnd: isize) {
+    QS_HWND.store(hwnd, Ordering::Relaxed);
+}
 
 /// Wide-string key under which the original `WNDPROC` for each subclassed
 /// HWND is stored via `SetPropW`. Lets a single `subclass_proc` serve many
@@ -135,17 +169,46 @@ pub fn set_suppress(enabled: bool) {
 }
 
 unsafe extern "system" fn keyboard_proc(n_code: i32, w_param: usize, l_param: isize) -> isize {
-    if n_code == HC_ACTION && w_param == WM_SYSKEYDOWN as usize {
+    if n_code == HC_ACTION {
         let kb = &*(l_param as *const KBDLLHOOKSTRUCT);
-        if kb.vk_code == VK_SPACE
+
+        // Alt+Space — swallow so it doesn't pop the system menu.
+        if w_param == WM_SYSKEYDOWN as usize
+            && kb.vk_code == VK_SPACE
             && (kb.flags & LLKHF_ALTDOWN) != 0
             && SUPPRESS.load(Ordering::Relaxed)
         {
             if !LOGGED_LL_INTERCEPT.swap(true, Ordering::Relaxed) {
                 eprintln!("[windows_hook] swallowed Alt+Space via WH_KEYBOARD_LL");
             }
-            // Nonzero swallows the keystroke before any window sees it.
             return 1;
+        }
+
+        // Escape — conditionally swallow to close the quick-switcher.
+        //
+        // Only swallow when ALL of:
+        //   1. The quick-switcher is registered (QS_HWND != 0)
+        //   2. The QS window is currently visible (IsWindowVisible)
+        //   3. The QS window does NOT have OS-level focus — otherwise the
+        //      webview is the one that should receive the key, and our
+        //      JS-side listener in QuickSwitcher.tsx handles it.
+        //
+        // This is the difference vs. a RegisterHotKey-based global
+        // shortcut: we let Escape continue to the focused window whenever
+        // the condition isn't met, so tool windows' own Escape handlers
+        // (e.g. close on Esc) keep working.
+        if kb.vk_code == VK_ESCAPE {
+            let qs_hwnd = QS_HWND.load(Ordering::Relaxed);
+            if qs_hwnd != 0
+                && IsWindowVisible(qs_hwnd) != 0
+                && GetForegroundWindow() != qs_hwnd
+            {
+                ShowWindow(qs_hwnd, SW_HIDE);
+                if !LOGGED_ESC_INTERCEPT.swap(true, Ordering::Relaxed) {
+                    eprintln!("[windows_hook] swallowed ESC and hid QS (HWND=0x{qs_hwnd:x})");
+                }
+                return 1;
+            }
         }
     }
     CallNextHookEx(HOOK_HANDLE.load(Ordering::Relaxed), n_code, w_param, l_param)

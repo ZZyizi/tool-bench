@@ -102,6 +102,21 @@ export function QuickSwitcher() {
     }
   }, []);
 
+  // Window-level Escape — survives mouse clicks that move focus off the
+  // search input (e.g. clicking a cell). Capture so we win the race with
+  // any input-level handler.
+  useEffect(() => {
+    const onWindowKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        void closeWindow();
+      }
+    };
+    window.addEventListener('keydown', onWindowKey, { capture: true });
+    return () => window.removeEventListener('keydown', onWindowKey, { capture: true });
+  }, [closeWindow]);
+
   const launchItem = useCallback(
     async (item: Item, useAndGo: boolean) => {
       setError(null);

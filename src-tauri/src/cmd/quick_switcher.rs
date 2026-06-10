@@ -75,7 +75,11 @@ fn build_qs_window(app: &AppHandle, show: bool) -> Result<(), String> {
     // as the main window — see `windows_hook::subclass`.
     #[cfg(windows)]
     if let Ok(hwnd) = window.hwnd() {
-        crate::windows_hook::subclass(hwnd.0 as isize);
+        let raw = hwnd.0 as isize;
+        crate::windows_hook::subclass(raw);
+        // Also hand the HWND to the LL hook so it can swallow Escape and
+        // hide the QS even when focus has moved to a tool window.
+        crate::windows_hook::set_qs_hwnd(raw);
     }
 
     let blur_app = app.clone();

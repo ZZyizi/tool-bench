@@ -12,7 +12,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{Manager, WindowEvent};
 use crate::cmd::settings::{default_settings_path, SettingsStore};
 use crate::cmd::quick_switcher;
-use crate::cmd::windows::CLOSE_HIDE;
+use crate::cmd::windows::{CLOSE_HIDE, CLOSE_QUIT};
 use crate::platform::port_scanner::PortScanner;
 
 pub struct AppState {
@@ -39,6 +39,18 @@ pub fn run() {
             // Load settings and apply the saved shortcut & close behavior
             if let Err(e) = cmd::settings::apply_shortcut_from_settings(app.handle()) {
                 eprintln!("[toolBench] failed to register global shortcut: {e}");
+            }
+
+            // Sync close_behavior from the persisted settings file. The atomic
+            // is initialized to CLOSE_HIDE in run(); without this it stays
+            // there across restarts and ignores whatever the user picked.
+            if let Ok(settings) = app.state::<SettingsStore>().load() {
+                let value = if settings.close_behavior == "quit" {
+                    CLOSE_QUIT
+                } else {
+                    CLOSE_HIDE
+                };
+                close_behavior.store(value, std::sync::atomic::Ordering::Relaxed);
             }
 
             build_tray(app)?;
@@ -129,13 +141,21 @@ fn install_main_window_close_handler(
 ) {
     if let Some(main) = app.get_webview_window("main") {
         let main_for_event = main.clone();
+        let app_handle = app.handle().clone();
         main.on_window_event(move |event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
-                if close_behavior.load(std::sync::atomic::Ordering::Relaxed) == CLOSE_HIDE {
+                let behavior = close_behavior.load(std::sync::atomic::Ordering::Relaxed);
+                if behavior == CLOSE_HIDE {
                     api.prevent_close();
                     if let Err(e) = main_for_event.hide() {
                         eprintln!("[toolBench] failed to hide main window: {e}");
                     }
+                } else {
+                    // CLOSE_QUIT: let the main window close, then explicitly
+                    // terminate the process. Without this, the tray icon and
+                    // the pre-created (hidden) quick-switcher window keep the
+                    // event loop alive forever.
+                    app_handle.exit(0);
                 }
             }
         });

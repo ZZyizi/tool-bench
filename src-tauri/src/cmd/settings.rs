@@ -116,12 +116,15 @@ fn apply_shortcut(app: &tauri::AppHandle, shortcut_str: &str) -> Result<(), Stri
         .parse()
         .map_err(|_| format!("无效快捷键: {}", shortcut_str))?;
 
-    // Unregister ALL existing global shortcuts (we only have one)
+    // Unregister ALL existing global shortcuts before re-registering.
+    // (The Escape key is NOT a global shortcut — it's handled at a lower
+    // level by the WH_KEYBOARD_LL hook in windows_hook, which only
+    // intercepts ESC when the quick-switcher is visible AND doesn't have
+    // focus, so tool windows' own ESC handlers keep working.)
     app.global_shortcut()
         .unregister_all()
         .map_err(|e| e.to_string())?;
 
-    // Register the new one
     let app_handle = app.clone();
     app.global_shortcut()
         .on_shortcut(new_shortcut, move |_app, _shortcut, event| {
