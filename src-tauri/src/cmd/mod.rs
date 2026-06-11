@@ -1,4 +1,3 @@
-pub mod apps;
 pub mod capabilities;
 pub mod env;
 pub mod ports;

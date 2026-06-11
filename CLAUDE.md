@@ -64,7 +64,6 @@ A lightweight **developer desktop toolbox** built on **Tauri 2 + React 19 + Type
 - `cd src-tauri && cargo check` — 快速类型检查
 - `cd src-tauri && cargo test` — 全部 Rust 单元测试
 - `cd src-tauri && cargo test --lib platform::windows::tests` — 单个测试模块
-- `cd src-tauri && cargo test --lib cmd::apps` — 应用扫描测试
 
 ### 手动验证
 
@@ -167,7 +166,6 @@ src-tauri/src/
 │   ├── ports.rs                        # list_ports / kill_port / kill_by_process_name
 │   ├── env.rs                          # list_env / set_var_cmd / delete_var_cmd
 │   │                                   # set_path_entries_cmd / detect_preset_cmd / apply_preset_cmd
-│   ├── apps.rs                         # list_installed_apps / launch_app（Win: .lnk + PowerShell）
 │   ├── quick_switcher.rs               # open_quick_switcher（+ 预创建 + 居中 + 收起时序）
 │   ├── settings.rs                     # get_settings / set_settings / set_recording_mode
 │   ├── windows.rs                      # open_tool_window / close_tool_window
@@ -222,7 +220,6 @@ interface Plugin {
 ### 工具 ID 命名空间（Pin / 启动器识别用）
 
 - 内置工具：`tool:<id>` —— `<id>` 即 `manifest.id`
-- 安装应用：`app:<fnv64-of-path>` —— FNV-1a 64 对归一化路径（小写 + 正斜杠）哈希（[cmd/apps.rs:226](src-tauri/src/cmd/apps.rs) `stable_id_for`）
 
 ---
 
@@ -234,8 +231,6 @@ interface Plugin {
 | `kill_port(port)` | `cmd::ports::kill_port` | 单 PID 释放；选 LISTENING 优先；UI 二次确认 |
 | `kill_by_process_name(name)` | `cmd::ports::kill_by_process_name` | 批量结束（v0.2 新增） |
 | `list_capabilities()` | `cmd::capabilities::list_capabilities` | 后端能力声明（V0.3+ 权限校验） |
-| `list_installed_apps()` | `cmd::apps::list_installed_apps` | Win: .lnk + PowerShell；Unix: .desktop |
-| `launch_app(target)` | `cmd::apps::launch_app` | `cmd /C start "" "<target>"`（detach） |
 | `open_quick_switcher()` | `cmd::quick_switcher::open_quick_switcher` | 切换/创建/居中 |
 | `open_tool_window(...)` | `cmd::windows::open_tool_window` | 创建或聚焦 `tool-<id>`；支持 use_and_go |
 | `close_tool_window(pluginId)` | `cmd::windows::close_tool_window` | 显式关闭 |
@@ -250,7 +245,7 @@ interface Plugin {
 | `apply_preset(plan)` | `cmd::env::apply_preset_cmd` | 应用 plan（写变量 + 改 PATH） |
 | `get_hook_diagnostics()` | `crate::windows_hook::get_hook_diagnostics` | 钩子命中/吞咽/QS hwnd 诊断 |
 
-所有命令返回 `Result<T, String>`（IPC 边界 stringified），内部错误用 `thiserror`（`PortError` / `AppsError` / `EnvError`）。
+所有命令返回 `Result<T, String>`（IPC 边界 stringified），内部错误用 `thiserror`（`PortError` / `EnvError`）。
 
 ---
 
@@ -312,12 +307,6 @@ const DEFAULT_SETTINGS = {
 - **幂等子类化**：用 `GetPropW` 标记已子类化的 HWND，避免重复替换
 - **诊断命令**：`get_hook_diagnostics()` 返回 JSON 计数；调试钩子行为时第一个去看
 
-### apps.rs 的 PowerShell 解析
-
-走 `powershell -File <script.ps1> <paths...>`，**不是** `-Command <script> <paths...>`。Why：PowerShell 5.1 的 `-Command` 会把后续所有 token 当成脚本再解析，路径里 `$` / 括号会被当成子表达式/变量引用，在受限执行策略下报 `PSSecurityException + InvalidResult`。`-File` + `param([string[]]$Links)` 把参数绑成参数，PowerShell 不会重解析。
-
-脚本写到 `temp_dir/devtoolkit-resolve-<pid>.ps1`（pid 防并发），执行后 `remove_file` 清理。
-
 ### set_var / apply_preset 的 Windows 实现
 
 `cmd/env.rs` 走注册表 / `SetX` 等 Windows API。改完用户变量需要新开 cmd 才能生效（OS 行为，应用层无解）；UI 用 warnings 提示用户。
@@ -333,7 +322,7 @@ const DEFAULT_SETTINGS = {
 5. **设置原子写**：永远是 `.tmp` → `rename`，不要直接 `write` 覆盖
 6. **全局快捷键变更**：`unregister_all()` 后再 `on_shortcut(new, ...)`，否则会重复触发
 7. **快捷键字符串格式**：用 Tauri `Shortcut::parse()` 能识别的格式（`Ctrl+Space` / `Alt+Space` / `CmdOrCtrl+Shift+P` 等）
-8. **不引入第三方 Rust crate**（如 sysinfo / netstat2 / windows）—— 按设计原则解析 CLI / `WScript.Shell` 输出
+8. **不引入第三方 Rust crate**（如 sysinfo / netstat2 / windows）—— 按设计原则解析 CLI 输出
 9. **没有前端测试框架**（Vitest / RTL）—— v0.2 仍在 UI 快速迭代
 10. **样式** = 原生 CSS + CSS Variables；**图标** = `lucide-react`；**状态** = `useState` + `useSettings`；**不要**引入 Tailwind / CSS-in-JS / Redux / Zustand
 
@@ -362,7 +351,6 @@ const DEFAULT_SETTINGS = {
 
 - **Rust 单元测试**（`cargo test`）：
   - `platform::windows::tests` / `platform::unix::tests` —— 解析器（LISTEN/ESTABLISHED/UDP/无效行/去重）
-  - `cmd::apps::tests` —— `stable_id_for` 路径分隔符大小写不敏感、不同路径得到不同 id
   - `cmd::settings::tests` —— 默认值、JSON 序列化往返（如有）
 - **手动验证** 仍是验证 IPC + UI 完整流程的唯一方式。**不要**依赖"编译通过 + 单元测试绿"就声称完成
 - **不引入** Vitest / RTL 等前端测试框架——v0.3+ 再评估

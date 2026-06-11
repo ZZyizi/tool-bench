@@ -47,7 +47,6 @@
 | **多窗口隔离** | 每个工具独立 webview；按 `Esc` 关工具；失去焦点自动收起 |
 | **系统托盘** | 关闭主窗默认隐藏到托盘；可改为"真退出"；托盘菜单含显示主窗/快速启动/退出 |
 | **可配置全局快捷键** | 通过设置面板录制新快捷键（仅 `Ctrl+Space` 为默认推荐） |
-| **应用扫描** | Windows：递归扫描开始菜单 `.lnk`，用 PowerShell 解析 target/icon；Unix：扫 `*.desktop` 兜底 |
 | **环境变量编辑** | 读/写/删 user 与 system 作用域；PATH 单独编辑；Java / Python / Node / Go / Rust 一键检测并配置 |
 | **端口管理** | 端口列表、按 PID 释放、按进程名批量结束 |
 | **设置持久化** | `app_config_dir/settings.json`（原子写：`.json.tmp` → rename） |
@@ -70,14 +69,14 @@
 | 桌面壳 | Tauri 2（Rust） |
 | 前端框架 | React 19 + TypeScript 5.8 |
 | 构建工具 | Vite 7 |
-| 跨平台 | Windows / macOS / Linux（**Windows 体验最完整**：含 PowerShell 解析 `.lnk`、WH_KEYBOARD_LL 钩子、Alt+Space 系统菜单吞咽） |
+| 跨平台 | Windows / macOS / Linux（**Windows 体验最完整**：含 WH_KEYBOARD_LL 钩子、Alt+Space 系统菜单吞咽） |
 | 状态管理 | React `useState` + `useSettings` Hook（设置走 Rust 持久化） |
 | 样式 | 原生 CSS + CSS Variables（深色主题） |
 | 图标 | `lucide-react` |
 | IPC | `@tauri-apps/api` 的 `invoke()` |
 | Rust 生态 | `tauri`、`tauri-plugin-opener`、`tauri-plugin-dialog`、`tauri-plugin-global-shortcut`、`serde`、`serde_json`、`thiserror` |
 
-> **依赖原则**：不引入 `sysinfo` / `netstat2` 等第三方 Rust crate —— 平台层直接解析 `netstat` / `lsof` 的 CLI 输出。Windows 应用扫描走 `WScript.Shell`（PowerShell 解析 `.lnk`），不依赖 `windows` crate 的非稳定 API。
+> **依赖原则**：不引入 `sysinfo` / `netstat2` 等第三方 Rust crate —— 平台层直接解析 `netstat` / `lsof` 的 CLI 输出。不依赖 `windows` crate 的非稳定 API。
 
 ---
 
@@ -140,7 +139,7 @@ npm run tauri build  # 打包成各平台原生安装包
 | `cargo check` | 快速类型检查 |
 | `cargo test` | 运行所有 Rust 单元测试 |
 | `cargo test --lib platform::windows::tests` | 运行单个测试模块 |
-| `cargo test --lib cmd::apps` | 应用扫描单元测试（`stable_id_for` 等） |
+| `cargo test --lib cmd::settings` | 设置模块单元测试 |
 
 ---
 
@@ -173,8 +172,6 @@ toolBench 采用 **两层职责分离 + 多窗口协议** 的设计 —— **Rus
 │   │   ├── ports.rs        list_ports / kill_port / kill_by_process_name   │
 │   │   ├── env.rs          list_env / set_var / delete_var / set_path_...   │
 │   │   │                  detect_preset / apply_preset                     │
-│   │   ├── apps.rs         list_installed_apps / launch_app                │
-│   │   │                  (Windows: .lnk + PowerShell 解析)                │
 │   │   ├── quick_switcher.rs  open_quick_switcher                          │
 │   │   ├── settings.rs     get_settings / set_settings / set_recording_mode│
 │   │   ├── windows.rs      open_tool_window / close_tool_window            │
@@ -238,7 +235,6 @@ toolBench 采用 **两层职责分离 + 多窗口协议** 的设计 —— **Rus
 │       │   ├── ports.rs                # list_ports / kill_port / kill_by_process_name
 │       │   ├── env.rs                  # list_env / set_var / delete_var / set_path_entries
 │       │   │                           # detect_preset / apply_preset
-│       │   ├── apps.rs                 # list_installed_apps / launch_app
 │       │   ├── quick_switcher.rs       # open_quick_switcher（+ 预创建 + 居中 + Esc 收起）
 │       │   ├── settings.rs             # get_settings / set_settings / set_recording_mode
 │       │   ├── windows.rs              # open_tool_window / close_tool_window
@@ -268,7 +264,7 @@ toolBench 采用 **两层职责分离 + 多窗口协议** 的设计 —— **Rus
 
 ## 暴露给前端的 Tauri 命令
 
-所有命令在 IPC 边界统一为 `Result<T, String>`（stringified error）；内部错误由 `thiserror` 定义（如 `PortError` / `AppsError` / `EnvError`）。
+所有命令在 IPC 边界统一为 `Result<T, String>`（stringified error）；内部错误由 `thiserror` 定义（如 `PortError` / `EnvError`）。
 
 | 命令 | 参数 | 返回 | 说明 |
 |------|------|------|------|
@@ -276,8 +272,6 @@ toolBench 采用 **两层职责分离 + 多窗口协议** 的设计 —— **Rus
 | `kill_port` | `port: u16` | `KillResult` | UI 二次确认；后端 `taskkill /F` 或 `kill -9` |
 | `kill_by_process_name` | `name: String` | `KillByNameResult` | 按名批量结束所有匹配 PID（v0.2+） |
 | `list_capabilities` | — | `Capabilities` | 后端能力声明（V0.3+ 用于权限校验） |
-| `list_installed_apps` | — | `InstalledApps` | Windows 扫开始菜单 `.lnk` + PowerShell 解析；Unix 扫 `.desktop` |
-| `launch_app` | `target: String` | `void` | `cmd /C start "" "<target>"`（detach） |
 | `open_quick_switcher` | — | `void` | 切换或创建快速启动器窗口；居中屏幕 |
 | `open_tool_window` | `pluginId, title?, width?, height?, useAndGo?` | `void` | 创建/聚焦 `tool-<id>` webview 窗口 |
 | `close_tool_window` | `pluginId` | `void` | 关闭指定工具窗 |
@@ -314,8 +308,7 @@ toolBench 采用 **两层职责分离 + 多窗口协议** 的设计 —— **Rus
 ### 工具 ID 命名空间
 
 - 内置工具：`tool:<id>` —— `<id>` 即 `manifest.id`
-- 安装的应用：`app:<fnv64-of-normalized-path>` —— FNV-1a 64 对归一化（小写 + 正斜杠）的 `.lnk`/`.desktop` 路径哈希，跨路径分隔符稳定
-- 这两类 id 都可以在快速启动器中**搜索/Pin**
+- 可以在快速启动器中**搜索/Pin**
 
 ---
 
@@ -349,11 +342,11 @@ toolBench 采用 **两层职责分离 + 多窗口协议** 的设计 —— **Rus
 
 ## 跨平台支持
 
-| 平台 | 端口查询 | 进程终止 | 应用扫描 | 环境变量 | 全局快捷键 | 钩子 |
-|------|----------|----------|----------|----------|------------|------|
-| **Windows** | `chcp 65001 && netstat -ano`（带 `-b` 解析 `[exe.exe]` trailer） | `taskkill /F /PID xxx` | 开始菜单 `.lnk` + PowerShell `WScript.Shell` | 注册表 / `SetX` | ✅ | `WH_KEYBOARD_LL` + 窗口子类化（吞 Alt+Space） |
-| **macOS** | `lsof -i -P -n` | `kill -9 PID` | `*.desktop` 兜底（不完整） | `launchctl setenv` 等 | ✅ | ❌ |
-| **Linux** | `lsof -i -P -n` | `kill -9 PID` | `*.desktop` 兜底（不完整） | `~/.profile` / `/etc/environment` | ✅ | ❌ |
+| 平台 | 端口查询 | 进程终止 | 环境变量 | 全局快捷键 | 钩子 |
+|------|----------|----------|----------|------------|------|
+| **Windows** | `chcp 65001 && netstat -ano`（带 `-b` 解析 `[exe.exe]` trailer） | `taskkill /F /PID xxx` | 注册表 / `SetX` | 支持 | `WH_KEYBOARD_LL` + 窗口子类化（吞 Alt+Space） |
+| **macOS** | `lsof -i -P -n` | `kill -9 PID` | `launchctl setenv` 等 | 支持 | 不支持 |
+| **Linux** | `lsof -i -P -n` | `kill -9 PID` | `~/.profile` / `/etc/environment` | 支持 | 不支持 |
 
 **权限错误识别**（在 stderr 上做子串匹配）：
 
@@ -366,7 +359,6 @@ toolBench 采用 **两层职责分离 + 多窗口协议** 的设计 —— **Rus
 
 - **`WH_KEYBOARD_LL` 钩子**（[windows_hook.rs](src-tauri/src/windows_hook.rs)）：安装到主线程，`Alt+Space` 触发的系统菜单（`SC_KEYMENU`）被吞掉，保留给用户自定义快捷键。`Esc` 在快速启动器可见时由钩子直接发 `WM_CLOSE`，避免与 webview 焦点状态竞争。
 - **窗口子类化**：每个 webview 窗口（主窗、QS、工具窗）通过 `SetWindowLongPtrW` 替换 `WNDPROC`，在子类回调里继续吞 `WM_SYSCOMMAND` / `SC_KEYMENU`。幂等（用 `GetPropW` 标记）。
-- **PowerShell 解析 `.lnk`**：走 `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <script.ps1> <paths...>`（不是 `-Command`），避免路径里的 `$` / 括号被当成代码段。脚本写到 `temp_dir/devtoolkit-resolve-<pid>.ps1`，用 pid 区分并发实例。
 
 ---
 
@@ -378,7 +370,7 @@ toolBench 采用 **两层职责分离 + 多窗口协议** 的设计 —— **Rus
 - **设置原子写**：`settings.json.tmp` → `rename`。崩溃中段不会留下半截 JSON。
 - **全局快捷键变更**：必须先 `unregister_all()` 再 `on_shortcut(new, ...)`，避免重复触发。
 - **快捷键录制期间**（`set_recording_mode(true)`）：钩子 `SUPPRESS=false` 让 Alt+Space 等键能透传到 webview 让用户录制；结束时 `SUPPRESS=true` 并重新应用保存的快捷键。
-- **没有第三方 Rust crate** 用于"枚举系统信息"——按设计原则解析 CLI / `WScript.Shell` 输出。
+- **没有第三方 Rust crate** 用于"枚举系统信息"——按设计原则解析 CLI 输出。
 
 ---
 
@@ -387,7 +379,6 @@ toolBench 采用 **两层职责分离 + 多窗口协议** 的设计 —— **Rus
 - **Rust 单元测试** 覆盖：
   - `parse_netstat` / `parse_lsof`：4+ 个用例覆盖 LISTEN/ESTABLISHED/UDP/无效行/去重
   - `kill_port`：边界场景（端口无占用 / 权限拒绝 / 多个 PID）
-  - `cmd/apps`：`stable_id_for` 对路径分隔符大小写不敏感；不同路径得到不同 id
   - `cmd/settings`：默认值、JSON 序列化往返
 - **手动验证** 是验证 IPC + UI 完整流程的唯一方式：
   - **端口**：`python -m http.server 8765` 启动一个测试服务，运行应用，验证 8765 出现在列表中
@@ -402,11 +393,11 @@ toolBench 采用 **两层职责分离 + 多窗口协议** 的设计 —— **Rus
 
 | 版本 | 范围 | 状态 |
 |------|------|------|
-| **v0.1** | 端口列表 / 端口释放 / 基础 UI / 插件基础设施（port-manager） | ✅ 已完成 |
-| **v0.2** | 快速启动器 / 工具矩阵 / 设置 / 托盘 / Windows 钩子 / env-editor / kill_by_process_name | ✅ 已完成（当前 main） |
-| **v0.3** | 文件系统动态加载插件 / `manifest.capabilities` 权限强制 / 工具市场本地浏览 | 📋 规划中 |
-| **v0.4** | 远程插件市场 / 安装 / 签名校验 | 📋 规划中 |
-| **v1.0** | 打包发布 / 性能优化 / 全平台 polish | 📋 规划中 |
+| **v0.1** | 端口列表 / 端口释放 / 基础 UI / 插件基础设施（port-manager） |  已完成 |
+| **v0.2** | 快速启动器 / 工具矩阵 / 设置 / 托盘 / Windows 钩子 / env-editor / kill_by_process_name |  已完成（当前 main） |
+| **v0.3** | 文件系统动态加载插件 / `manifest.capabilities` 权限强制 / 工具市场本地浏览 |  规划中 |
+| **v0.4** | 远程插件市场 / 安装 / 签名校验 |  规划中 |
+| **v1.0** | 打包发布 / 性能优化 / 全平台 polish |  规划中 |
 
 未来内置工具候选：[docs/tools-planning.md](docs/tools-planning.md) 列出了进程查看器、系统概览、DNS 解析、Hosts 管理、文件差异对比等。
 

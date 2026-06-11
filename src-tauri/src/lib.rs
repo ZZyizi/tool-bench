@@ -68,8 +68,6 @@ pub fn run() {
             cmd::capabilities::list_capabilities,
             cmd::windows::open_tool_window,
             cmd::windows::close_tool_window,
-            cmd::apps::list_installed_apps,
-            cmd::apps::launch_app,
             cmd::quick_switcher::open_quick_switcher,
             cmd::settings::get_settings,
             cmd::settings::set_settings,

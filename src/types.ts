@@ -36,19 +36,6 @@ export interface FilteredPorts {
   hidden_system: number;
 }
 
-export interface InstalledApp {
-  id: string;
-  name: string;
-  target: string;
-  source: string;
-  icon_index: number | null;
-}
-
-export interface InstalledApps {
-  apps: InstalledApp[];
-  scanned_at_ms: number;
-}
-
 export type VarSource = 'user' | 'process' | 'system';
 export type Scope = 'user' | 'system';
 

@@ -4,7 +4,6 @@ import type {
   Capabilities,
   EnvSnapshot,
   FilteredPorts,
-  InstalledApps,
   KillByNameResult,
   KillResult,
   PresetKind,
@@ -19,9 +18,6 @@ export const api = {
   killByProcessName: (name: string) =>
     invoke<KillByNameResult>('kill_by_process_name', { name }),
   listCapabilities: () => invoke<Capabilities>('list_capabilities'),
-
-  listInstalledApps: () => invoke<InstalledApps>('list_installed_apps'),
-  launchApp: (target: string) => invoke<void>('launch_app', { target }),
 
   openQuickSwitcher: () => invoke<void>('open_quick_switcher'),
 
