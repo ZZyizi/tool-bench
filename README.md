@@ -10,7 +10,7 @@
 [![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite)](https://vitejs.dev/)
 [![Rust](https://img.shields.io/badge/Rust-stable-DEA584?logo=rust)](https://www.rust-lang.org/)
 [![Platform](https://img.shields.io/badge/平台-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](#跨平台支持)
-[![License](https://img.shields.io/badge/license-待定-lightgrey)](#许可证)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ---
 
@@ -439,3 +439,9 @@ toolBench 采用 **两层职责分离 + 多窗口协议** 的设计 —— **Rus
 - **v0.1 设计**：[docs/superpowers/specs/2026-06-05-devtoolkit-v0.1-design.md](docs/superpowers/specs/2026-06-05-devtoolkit-v0.1-design.md)
 - **v0.1 计划**：[docs/superpowers/plans/2026-06-05-devtoolkit-v0.1.md](docs/superpowers/plans/2026-06-05-devtoolkit-v0.1.md)
 - **Tauri 2 文档**：https://tauri.app/develop/
+
+---
+
+## 许可证
+
+本项目基于 [MIT License](LICENSE) 开源 —— 你可以自由使用、修改、分发，只需保留版权声明。Copyright © 2026 ZZyizi。
