@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { Box, Search, Settings, Zap, type LucideIcon } from 'lucide-react';
 import { globalRegistry } from '../plugins/registry';
 import { useSettings } from '../settings';
@@ -43,6 +44,26 @@ export function Launcher({ onOpenSettings }: LauncherProps) {
       setError(String(e));
     }
   };
+
+  const hideWindow = useCallback(async () => {
+    try {
+      await getCurrentWebviewWindow().hide();
+    } catch (e) {
+      console.error('[launcher] failed to hide window', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    const onWindowKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        void hideWindow();
+      }
+    };
+    window.addEventListener('keydown', onWindowKey, { capture: true });
+    return () => window.removeEventListener('keydown', onWindowKey, { capture: true });
+  }, [hideWindow]);
 
   return (
     <div className="launcher">

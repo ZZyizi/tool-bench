@@ -5,6 +5,10 @@
   "windows": ["main", "tool-*", "quick-switcher"],
   "permissions": [
     "core:default",
-    "opener:default"
+    "opener:default",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:window:allow-close"
   ]
 }

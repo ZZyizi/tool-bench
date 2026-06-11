@@ -95,26 +95,40 @@ export function QuickSwitcher() {
   }, [visible.length]);
 
   const closeWindow = useCallback(async () => {
+    console.log('[qs] closeWindow called');
     try {
       await getCurrentWebviewWindow().hide();
+      console.log('[qs] window hidden');
     } catch (e) {
       console.error('[qs] failed to hide window', e);
     }
   }, []);
 
   // Window-level Escape — survives mouse clicks that move focus off the
-  // search input (e.g. clicking a cell). Capture so we win the race with
-  // any input-level handler.
+  // search input (e.g. clicking a cell). Both window/document + keydown/keyup
+  // to survive any WebView2 / Tauri event-layer quirk.
   useEffect(() => {
-    const onWindowKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+    console.log('[qs] registering window-level Escape listeners');
+    const isEsc = (e: KeyboardEvent) =>
+      e.key === 'Escape' || e.key === 'Esc' || e.keyCode === 27;
+    const onKey = (e: KeyboardEvent) => {
+      console.log('[qs] window-level key event', { key: e.key, code: e.code, keyCode: e.keyCode, type: e.type, target: (e.target as HTMLElement)?.tagName });
+      if (isEsc(e)) {
+        console.log('[qs] window-level Escape detected, hiding');
         e.preventDefault();
         e.stopPropagation();
         void closeWindow();
       }
     };
-    window.addEventListener('keydown', onWindowKey, { capture: true });
-    return () => window.removeEventListener('keydown', onWindowKey, { capture: true });
+    window.addEventListener('keydown', onKey, { capture: true });
+    document.addEventListener('keydown', onKey, { capture: true });
+    window.addEventListener('keyup', onKey, { capture: true });
+    return () => {
+      console.log('[qs] unregistering window-level Escape listeners');
+      window.removeEventListener('keydown', onKey, { capture: true });
+      document.removeEventListener('keydown', onKey, { capture: true });
+      window.removeEventListener('keyup', onKey, { capture: true });
+    };
   }, [closeWindow]);
 
   const launchItem = useCallback(
@@ -174,7 +188,9 @@ export function QuickSwitcher() {
   );
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Escape') {
+    console.log('[qs] input onKeyDown', { key: e.key, code: e.code, keyCode: e.keyCode, type: e.type });
+    if (e.key === 'Escape' || e.key === 'Esc' || e.keyCode === 27) {
+      console.log('[qs] input Escape detected, hiding');
       e.preventDefault();
       void closeWindow();
       return;

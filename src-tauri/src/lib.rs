@@ -73,6 +73,7 @@ pub fn run() {
             cmd::settings::get_settings,
             cmd::settings::set_settings,
             cmd::settings::set_recording_mode,
+            crate::windows_hook::get_hook_diagnostics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
