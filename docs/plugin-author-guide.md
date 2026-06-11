@@ -211,7 +211,103 @@ const r = await echoApi.echo({ message: 'hi' });
 
 ---
 
-## 3. 调试与排错
+## 3. 使用 system 工具箱（3 文件插件：0 Rust 改动）
+
+如果插件只是「读 / 写 / 列文件 + 剪贴板」组合出来的小工具（便签 / 番茄钟 / 片段管理 / 配置浏览器），
+**不需要写任何 Rust**。`systemApi` 已经把 8 个通用原语打进主二进制。
+
+### 3.1 `systemApi` 提供的 8 个原语
+
+| 方法 | 用途 | 返回 |
+|---|---|---|
+| `systemApi.fileRead({path})` | 读 UTF-8 文本文件 | `Promise<string>` |
+| `systemApi.fileWrite({path, content})` | 原子写（`.tmp` + rename） | `Promise<void>` |
+| `systemApi.fileList({dir})` | 列目录（dirs 优先，名字字典序） | `Promise<FileEntry[]>` |
+| `systemApi.fileDelete({path})` | 删文件 / 空目录；缺失视作 no-op | `Promise<void>` |
+| `systemApi.dirEnsure({dir})` | 幂等建目录（含父级） | `Promise<void>` |
+| `systemApi.fileExists({path})` | 检查路径是否存在 | `Promise<boolean>` |
+| `systemApi.clipboardRead()` | 读剪贴板文本 | `Promise<string>` |
+| `systemApi.clipboardWrite({text})` | 写剪贴板 | `Promise<void>` |
+
+**所有路径必须绝对**（防止 cwd 漂移）。`file_write` 在 10 MB 以上拒绝；读也是。
+
+### 3.2 例子：3 文件实现「便签 / 番茄钟 / 片段管理」之类
+
+`plugins/file-counter/` 是端到端最小例子（读目录 → 分类统计），2 个文件、0 Rust：
+
+**`plugins/file-counter/plugin.json`**：
+
+```json
+{
+  "id": "file-counter",
+  "name": "File Counter",
+  "version": "0.1.0",
+  "description": "...",
+  "author": "...",
+  "category": "Other",
+  "icon": "Hash",
+  "entry": "./index.tsx",
+  "capabilities": ["fs:read"],
+  "windowWidth": 520,
+  "windowHeight": 360,
+  "commands": [
+    { "name": "file_list",  "argsRef": "FileListArgs",  "returnsRef": "FileListResult" },
+    { "name": "file_exists", "argsRef": "FileExistsArgs", "returnsRef": "FileExistsResult" },
+    { "name": "dir_ensure", "argsRef": "DirEnsureArgs", "returnsRef": "void" }
+  ]
+}
+```
+
+**`plugins/file-counter/index.tsx`**：
+
+```tsx
+import { Hash } from 'lucide-react';
+import type { Plugin } from '../../src/plugins/types';
+import { systemApi } from '../../src/plugins/api.gen';
+import manifestRaw from './plugin.json';
+
+const manifest = { ...manifestRaw, icon: Hash } as const;
+
+function FileCounterView() {
+  // ...useState 略...
+  const onCount = async () => {
+    const entries = await systemApi.fileList({ dir });
+    // 分类统计
+  };
+  return /* ... */;
+}
+
+export const fileCounterPlugin: Plugin = {
+  manifest,
+  Component: FileCounterView,
+  activate(ctx) { ctx.log('activated'); },
+};
+export default fileCounterPlugin;
+```
+
+跑 `npm run codegen` + 重启 → Sidebar / Launcher / QuickSwitcher 自动出现。
+
+### 3.3 路径从哪里来
+
+应用目前**不做路径作用域**（v0.4 故事）。Plugin 作者自行决定数据存哪：
+
+- 「让用户选目录」：用 Tauri 的 `@tauri-apps/plugin-dialog` 的 `open({ directory: true })` 拿绝对路径
+- 「自动放某处」：拼 `app.path().appConfigDir()`（需自己包一层 Tauri API 调用）
+
+### 3.4 不在 systemApi 里、能加不能加的
+
+| 想加的 | 建议 |
+|---|---|
+| `env_get(name)` | 加 1 个 `EnvGetArgs` 类型 + `system.rs` 1 个原语 + plugin.json 1 行 + dispatch.rs 1 行 |
+| `run_command({cmd, args})` | **不推荐**：等于放弃沙箱；要做先想清楚安全模型 |
+| `http_get({url})` | 同上；先想 CSP / 域名白名单 |
+| 自定义业务逻辑 | 回到第 2 节，自己写 `cmd/<id>.rs` |
+
+**底线**：systemApi 是 80% 「存数据」场景的最小集。需要新的原语时，照着 system.rs 的 8 个原语的代码模式补一个，~30 行。
+
+---
+
+## 4. 调试与排错
 
 ### 3.1 manifest 字段写错
 

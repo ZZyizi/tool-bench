@@ -66,6 +66,7 @@ pub fn build_registry(app_state: &crate::AppState) -> CommandRegistry {
     super::ports::register(&mut r, app_state.scanner.clone());
     super::env::register(&mut r);
     super::echo::register(&mut r);
+    super::system::register(&mut r);
     r
 }
 

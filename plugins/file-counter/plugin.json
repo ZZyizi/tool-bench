@@ -1,0 +1,30 @@
+{
+  "id": "file-counter",
+  "name": "File Counter",
+  "version": "0.1.0",
+  "description": "Demo: pick a directory and count how many files are in it. 3 files, 0 Rust.",
+  "author": "DevToolkit Team",
+  "category": "Other",
+  "icon": "Hash",
+  "entry": "./index.tsx",
+  "capabilities": ["fs:read"],
+  "windowWidth": 520,
+  "windowHeight": 360,
+  "commands": [
+    {
+      "name": "file_list",
+      "argsRef": "FileListArgs",
+      "returnsRef": "FileListResult"
+    },
+    {
+      "name": "file_exists",
+      "argsRef": "FileExistsArgs",
+      "returnsRef": "FileExistsResult"
+    },
+    {
+      "name": "dir_ensure",
+      "argsRef": "DirEnsureArgs",
+      "returnsRef": "void"
+    }
+  ]
+}

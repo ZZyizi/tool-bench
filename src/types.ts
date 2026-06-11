@@ -128,3 +128,46 @@ export interface EchoArgs {
 export interface EchoResult {
   message: string;
 }
+
+// ---- system toolbox ----
+//
+// 8 generic primitives (file / clipboard) backed by src-tauri/src/cmd/system.rs.
+// Composed by 3rd-party plugins to build sticky-notes / todo / snippet-manager
+// without writing any Rust. See docs/plugin-author-guide.md §3.
+
+export interface FileEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+}
+
+// Result type aliases — codegen's `returnsRef` is matched against
+// `export (interface|type) Name` in this file, so builtins like
+// `string` / `boolean` need to be re-exported with a name.
+export type FileReadResult = string;
+export type FileListResult = FileEntry[];
+export type FileExistsResult = boolean;
+
+export interface FileReadArgs {
+  path: string;
+}
+export interface FileWriteArgs {
+  path: string;
+  content: string;
+}
+export interface FileListArgs {
+  dir: string;
+}
+export interface FileDeleteArgs {
+  path: string;
+}
+export interface DirEnsureArgs {
+  dir: string;
+}
+export interface FileExistsArgs {
+  path: string;
+}
+export interface ClipboardWriteArgs {
+  text: string;
+}

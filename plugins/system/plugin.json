@@ -1,0 +1,60 @@
+{
+  "id": "system",
+  "name": "System Toolbox (internal)",
+  "version": "0.1.0",
+  "description": "Meta-plugin (codegen only, no UI). 8 generic primitives; commands live in src-tauri/src/cmd/system.rs. Do NOT add an index.tsx here.",
+  "author": "DevToolkit Team",
+  "category": "Other",
+  "icon": "Wrench",
+  "entry": "./index.tsx",
+  "capabilities": [
+    "fs:read",
+    "fs:write",
+    "clipboard:read",
+    "clipboard:write"
+  ],
+  "windowWidth": 0,
+  "windowHeight": 0,
+  "commands": [
+    {
+      "name": "file_read",
+      "argsRef": "FileReadArgs",
+      "returnsRef": "FileReadResult"
+    },
+    {
+      "name": "file_write",
+      "argsRef": "FileWriteArgs",
+      "returnsRef": "void"
+    },
+    {
+      "name": "file_list",
+      "argsRef": "FileListArgs",
+      "returnsRef": "FileListResult"
+    },
+    {
+      "name": "file_delete",
+      "argsRef": "FileDeleteArgs",
+      "returnsRef": "void"
+    },
+    {
+      "name": "dir_ensure",
+      "argsRef": "DirEnsureArgs",
+      "returnsRef": "void"
+    },
+    {
+      "name": "file_exists",
+      "argsRef": "FileExistsArgs",
+      "returnsRef": "FileExistsResult"
+    },
+    {
+      "name": "clipboard_read",
+      "argsRef": "void",
+      "returnsRef": "FileReadResult"
+    },
+    {
+      "name": "clipboard_write",
+      "argsRef": "ClipboardWriteArgs",
+      "returnsRef": "void"
+    }
+  ]
+}
