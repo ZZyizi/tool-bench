@@ -52,3 +52,47 @@ export interface InstalledApps {
 export interface PinnedApps {
   ids: string[];
 }
+
+export type VarSource = 'user' | 'process' | 'system';
+export type Scope = 'user' | 'system';
+
+export interface EnvVar {
+  name: string;
+  value: string;
+  source: VarSource;
+  scope: Scope;
+}
+
+export interface EnvSnapshot {
+  vars: EnvVar[];
+  path_user: string[];
+  path_system: string[];
+  warnings: string[];
+  captured_at_ms: number;
+}
+
+export type PresetKind = 'java' | 'python' | 'node' | 'go' | 'rust';
+
+export interface EnvVarSpec {
+  name: string;
+  value: string;
+}
+
+export interface PresetPlan {
+  preset: PresetKind;
+  scope: Scope;
+  vars: EnvVarSpec[];
+  path_prepend: string[];
+  path_append: string[];
+}
+
+export interface PresetResult {
+  preset: PresetKind;
+  plan: PresetPlan;
+  warnings: string[];
+}
+
+export interface ApplyResult {
+  applied: string[];
+  warnings: string[];
+}

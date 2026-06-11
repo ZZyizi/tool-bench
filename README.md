@@ -67,9 +67,6 @@
 - **Rust** stable（[rustup](https://rustup.rs)）
 - 平台构建工具：
   - **Windows**：Microsoft Visual Studio C++ Build Tools + WebView2
-  - **macOS**：Xcode Command Line Tools
-  - **Linux**：webkit2gtk、libssl-dev 等（见 [Tauri 文档](https://tauri.app/start/prerequisites/)）
-
 ### 安装与运行
 
 ```bash

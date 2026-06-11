@@ -25,6 +25,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(AppState {
             scanner: platform::create_scanner(),
@@ -73,6 +74,12 @@ pub fn run() {
             cmd::settings::get_settings,
             cmd::settings::set_settings,
             cmd::settings::set_recording_mode,
+            cmd::env::list_env,
+            cmd::env::set_var_cmd,
+            cmd::env::delete_var_cmd,
+            cmd::env::set_path_entries_cmd,
+            cmd::env::detect_preset_cmd,
+            cmd::env::apply_preset_cmd,
             crate::windows_hook::get_hook_diagnostics,
         ])
         .run(tauri::generate_context!())

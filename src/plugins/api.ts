@@ -1,11 +1,17 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
+  ApplyResult,
   Capabilities,
+  EnvSnapshot,
   FilteredPorts,
   InstalledApps,
   KillByNameResult,
   KillResult,
   PinnedApps,
+  PresetKind,
+  PresetPlan,
+  PresetResult,
+  Scope,
 } from '../types';
 
 export const api = {
@@ -23,4 +29,16 @@ export const api = {
     invoke<PinnedApps>('set_pinned_apps', { apps }),
 
   openQuickSwitcher: () => invoke<void>('open_quick_switcher'),
+
+  listEnv: () => invoke<EnvSnapshot>('list_env'),
+  setVar: (scope: Scope, name: string, value: string) =>
+    invoke<void>('set_var', { scope, name, value }),
+  deleteVar: (scope: Scope, name: string) =>
+    invoke<void>('delete_var', { scope, name }),
+  setPathEntries: (scope: Scope, entries: string[]) =>
+    invoke<void>('set_path_entries', { scope, entries }),
+  detectPreset: (kind: PresetKind, dir: string) =>
+    invoke<PresetResult>('detect_preset', { kind, dir }),
+  applyPreset: (plan: PresetPlan) =>
+    invoke<ApplyResult>('apply_preset', { plan }),
 };
