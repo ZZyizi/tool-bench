@@ -7,9 +7,15 @@ import type { IconRef } from './types';
 // UI 层统一通过 resolveIcon 拿 LucideIcon。
 export function resolveIcon(icon: IconRef | undefined): LucideIcon {
   if (!icon) return Box;
-  if (typeof icon === 'function') return icon as LucideIcon;
-  const fromLib = (Lucide as unknown as Record<string, LucideIcon | undefined>)[icon];
-  if (fromLib) return fromLib;
-  console.warn(`[plugins] icon "${icon}" not found in lucide-react, falling back to Box`);
+  // lucide-react 新版图标是 forwardRef/memo 包装的对象(typeof === 'object'),
+  // 不是函数,所以两种都视作可直接渲染的 React 组件。
+  if (typeof icon === 'function' || typeof icon === 'object') {
+    return icon as LucideIcon;
+  }
+  if (typeof icon === 'string') {
+    const fromLib = (Lucide as unknown as Record<string, LucideIcon | undefined>)[icon];
+    if (fromLib) return fromLib;
+    console.warn(`[plugins] icon "${icon}" not found in lucide-react, falling back to Box`);
+  }
   return Box;
 }
