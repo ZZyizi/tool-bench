@@ -5,6 +5,11 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "validate-plugins": "node scripts/validate-plugins.cjs",
+    "codegen": "node scripts/codegen-api.cjs",
+    "precodegen": "npm run validate-plugins",
+    "predev": "npm run codegen",
+    "prebuild": "npm run codegen",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",

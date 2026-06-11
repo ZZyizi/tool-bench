@@ -1,8 +1,7 @@
-use crate::platform::port_scanner::PortInfo;
-use serde::Serialize;
-use tauri::State;
-
-use crate::AppState;
+use crate::platform::port_scanner::{PortInfo, PortScanner};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::sync::Arc;
 
 const SYSTEM_PROCESS_NAMES: &[&str] = &[
     // Windows
@@ -88,35 +87,59 @@ fn filter_ports(ports: Vec<PortInfo>, query: &str) -> Vec<PortInfo> {
         .collect()
 }
 
-#[tauri::command]
-pub fn list_ports(query: String, state: State<'_, AppState>) -> Result<FilteredPorts, String> {
-    let raw = state.scanner.list().map_err(|e| e.to_string())?;
-    let after_query = filter_ports(raw, &query);
+pub fn list_ports_inner(scanner: &dyn PortScanner, query: &str) -> Result<FilteredPorts, String> {
+    let raw = scanner.list().map_err(|e| e.to_string())?;
+    let after_query = filter_ports(raw, query);
     let (ports, hidden_system) = hide_system(after_query);
     Ok(FilteredPorts { ports, hidden_system })
 }
 
-fn pids_matching_name(ports: &[PortInfo], name: &str) -> Vec<u32> {
-    let mut pids: Vec<u32> = ports
+pub fn kill_port_inner(scanner: &dyn PortScanner, port: u16) -> Result<KillResult, String> {
+    // Intentionally re-list without the search filter and without hiding system
+    // processes: a user may have narrowed the view, but kill should target the
+    // actual port regardless of the active query. (System processes typically
+    // refuse kill with PermissionDenied — that surfaces as a failed KillResult
+    // in the UI.)
+    let ports = scanner.list().map_err(|e| e.to_string())?;
+    let matching: Vec<&PortInfo> = ports.iter().filter(|p| p.port == port).collect();
+    if matching.is_empty() {
+        return Ok(KillResult {
+            success: false,
+            pid: 0,
+            port,
+            message: format!("No process found listening on port {}", port),
+        });
+    }
+    let target = matching
         .iter()
-        .filter(|p| p.process_name.as_deref() == Some(name))
-        .map(|p| p.pid)
-        .collect();
-    pids.sort_unstable();
-    pids.dedup();
-    pids
+        .find(|p| p.state.is_empty() || p.state == "LISTEN" || p.state == "LISTENING")
+        .copied()
+        .unwrap_or(matching[0]);
+    match scanner.kill(target.pid) {
+        Ok(()) => Ok(KillResult {
+            success: true,
+            pid: target.pid,
+            port,
+            message: format!("Killed PID {} on port {}", target.pid, port),
+        }),
+        Err(e) => Ok(KillResult {
+            success: false,
+            pid: target.pid,
+            port,
+            message: e.to_string(),
+        }),
+    }
 }
 
-#[tauri::command]
-pub fn kill_by_process_name(
-    name: String,
-    state: State<'_, AppState>,
+pub fn kill_by_process_name_inner(
+    scanner: &dyn PortScanner,
+    name: &str,
 ) -> Result<KillByNameResult, String> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
         return Err("process name must not be empty".into());
     }
-    let ports = state.scanner.list().map_err(|e| e.to_string())?;
+    let ports = scanner.list().map_err(|e| e.to_string())?;
     let pids = pids_matching_name(&ports, trimmed);
 
     if pids.is_empty() {
@@ -132,7 +155,7 @@ pub fn kill_by_process_name(
     let mut killed: u32 = 0;
     let mut failed: u32 = 0;
     for pid in &pids {
-        match state.scanner.kill(*pid) {
+        match scanner.kill(*pid) {
             Ok(()) => killed += 1,
             Err(_) => failed += 1,
         }
@@ -152,45 +175,73 @@ pub fn kill_by_process_name(
     })
 }
 
-#[tauri::command]
-pub fn kill_port(port: u16, state: State<'_, AppState>) -> Result<KillResult, String> {
-    // Intentionally re-list without the search filter and without hiding system
-    // processes: a user may have narrowed the view, but kill should target the
-    // actual port regardless of the active query. (System processes typically
-    // refuse kill with PermissionDenied — that surfaces as a failed KillResult
-    // in the UI.)
-    let ports = state
-        .scanner
-        .list()
-        .map_err(|e| e.to_string())?;
-    let matching: Vec<&PortInfo> = ports.iter().filter(|p| p.port == port).collect();
-    if matching.is_empty() {
-        return Ok(KillResult {
-            success: false,
-            pid: 0,
-            port,
-            message: format!("No process found listening on port {}", port),
-        });
-    }
-    let target = matching
+fn pids_matching_name(ports: &[PortInfo], name: &str) -> Vec<u32> {
+    let mut pids: Vec<u32> = ports
         .iter()
-        .find(|p| p.state.is_empty() || p.state == "LISTEN" || p.state == "LISTENING")
-        .copied()
-        .unwrap_or(matching[0]);
-    match state.scanner.kill(target.pid) {
-        Ok(()) => Ok(KillResult {
-            success: true,
-            pid: target.pid,
-            port,
-            message: format!("Killed PID {} on port {}", target.pid, port),
-        }),
-        Err(e) => Ok(KillResult {
-            success: false,
-            pid: target.pid,
-            port,
-            message: e.to_string(),
-        }),
-    }
+        .filter(|p| p.process_name.as_deref() == Some(name))
+        .map(|p| p.pid)
+        .collect();
+    pids.sort_unstable();
+    pids.dedup();
+    pids
+}
+
+// ---- dispatch wrappers + register ----
+//
+// The three commands below are no longer individually registered with
+// `#[tauri::command]` — they are reached via `dispatch` in cmd/dispatch.rs.
+// The frontend calls them through `invoke<...>('dispatch', { name, args })`,
+// and the wrappers here translate `serde_json::Value` args into the typed
+// inputs the inner functions expect.
+
+#[derive(Deserialize)]
+struct ListPortsArgs {
+    #[serde(default)]
+    query: String,
+}
+
+#[derive(Deserialize)]
+struct KillPortArgs {
+    port: u16,
+}
+
+#[derive(Deserialize)]
+struct KillByNameArgs {
+    name: String,
+}
+
+fn list_ports_dispatch(args: Value, scanner: &dyn PortScanner) -> Result<Value, String> {
+    let parsed: ListPortsArgs = super::dispatch::parse_args(args)?;
+    let result = list_ports_inner(scanner, &parsed.query)?;
+    serde_json::to_value(result).map_err(|e| e.to_string())
+}
+
+fn kill_port_dispatch(args: Value, scanner: &dyn PortScanner) -> Result<Value, String> {
+    let parsed: KillPortArgs = super::dispatch::parse_args(args)?;
+    let result = kill_port_inner(scanner, parsed.port)?;
+    serde_json::to_value(result).map_err(|e| e.to_string())
+}
+
+fn kill_by_process_name_dispatch(args: Value, scanner: &dyn PortScanner) -> Result<Value, String> {
+    let parsed: KillByNameArgs = super::dispatch::parse_args(args)?;
+    let result = kill_by_process_name_inner(scanner, &parsed.name)?;
+    serde_json::to_value(result).map_err(|e| e.to_string())
+}
+
+/// Register all ports commands into the dispatch routing table. The scanner
+/// is captured into each handler closure so the `dispatch` command (which is
+/// the only Tauri command on the registry side) doesn't need to know about
+/// AppState.
+pub fn register(r: &mut super::dispatch::CommandRegistry, scanner: Arc<dyn PortScanner>) {
+    let s1 = scanner.clone();
+    r.register("list_ports", move |args| list_ports_dispatch(args, s1.as_ref()));
+    let s2 = scanner.clone();
+    r.register("kill_port", move |args| kill_port_dispatch(args, s2.as_ref()));
+    let s3 = scanner.clone();
+    r.register(
+        "kill_by_process_name",
+        move |args| kill_by_process_name_dispatch(args, s3.as_ref()),
+    );
 }
 
 #[cfg(test)]

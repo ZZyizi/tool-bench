@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Pin, PinOff, Search, X, Zap } from 'lucide-react';
+import { Pin, PinOff, Search, X, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { globalRegistry } from '../plugins/registry';
 import { useSettings } from '../settings';
+import { resolveIcon } from '../plugins/resolveIcon';
 import './QuickSwitcher.css';
 
 type Item = {
@@ -24,7 +25,7 @@ function buildToolItems(): Item[] {
     pluginId: plugin.manifest.id,
     name: plugin.manifest.name,
     description: plugin.manifest.description,
-    icon: (plugin.manifest.icon ?? Box) as LucideIcon,
+    icon: resolveIcon(plugin.manifest.icon),
   }));
 }
 

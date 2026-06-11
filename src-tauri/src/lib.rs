@@ -37,6 +37,13 @@ pub fn run() {
             });
             app.manage(SettingsStore::new(settings_path));
 
+            // Build the plugin command routing table. New plugins only need a
+            // `pub mod foo;` in cmd/mod.rs and a `super::foo::register(...)`
+            // call in cmd/dispatch.rs::build_registry — lib.rs stays untouched.
+            let app_state = app.state::<AppState>().inner();
+            let registry = cmd::dispatch::build_registry(app_state);
+            app.manage(std::sync::Arc::new(std::sync::Mutex::new(registry)));
+
             // Load settings and apply the saved shortcut & close behavior
             if let Err(e) = cmd::settings::apply_shortcut_from_settings(app.handle()) {
                 eprintln!("[toolBench] failed to register global shortcut: {e}");
@@ -62,9 +69,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            cmd::ports::list_ports,
-            cmd::ports::kill_port,
-            cmd::ports::kill_by_process_name,
+            cmd::dispatch::dispatch,
             cmd::capabilities::list_capabilities,
             cmd::windows::open_tool_window,
             cmd::windows::close_tool_window,
@@ -72,12 +77,6 @@ pub fn run() {
             cmd::settings::get_settings,
             cmd::settings::set_settings,
             cmd::settings::set_recording_mode,
-            cmd::env::list_env,
-            cmd::env::set_var_cmd,
-            cmd::env::delete_var_cmd,
-            cmd::env::set_path_entries_cmd,
-            cmd::env::detect_preset_cmd,
-            cmd::env::apply_preset_cmd,
             crate::windows_hook::get_hook_diagnostics,
         ])
         .run(tauri::generate_context!())

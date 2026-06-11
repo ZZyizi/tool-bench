@@ -1,5 +1,6 @@
-import { Box, Settings, type LucideIcon } from 'lucide-react';
+import { Settings, type LucideIcon } from 'lucide-react';
 import { globalRegistry } from '../plugins/registry';
+import { resolveIcon } from '../plugins/resolveIcon';
 import './Sidebar.css';
 
 interface SidebarProps {
@@ -29,7 +30,7 @@ export function Sidebar({ activeId, onSelect, onOpenSettings }: SidebarProps) {
         <div key={category} className="sidebar__group">
           <div className="sidebar__group-title">{category}</div>
           {plugins.map((plugin) => {
-            const Icon = (plugin.manifest.icon ?? Box) as LucideIcon;
+            const Icon = resolveIcon(plugin.manifest.icon) as LucideIcon;
             return (
               <div
                 key={plugin.manifest.id}

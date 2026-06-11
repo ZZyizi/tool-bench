@@ -1,0 +1,30 @@
+{
+  "id": "port-manager",
+  "name": "端口管理",
+  "version": "0.1.0",
+  "description": "查看和释放系统占用的端口",
+  "author": "DevToolkit Team",
+  "category": "Network",
+  "icon": "Plug",
+  "entry": "./index.tsx",
+  "capabilities": ["network:read", "process:read", "process:kill"],
+  "windowWidth": 800,
+  "windowHeight": 560,
+  "commands": [
+    {
+      "name": "list_ports",
+      "argsRef": "ListPortsArgs",
+      "returnsRef": "FilteredPorts"
+    },
+    {
+      "name": "kill_port",
+      "argsRef": "KillPortArgs",
+      "returnsRef": "KillResult"
+    },
+    {
+      "name": "kill_by_process_name",
+      "argsRef": "KillByNameArgs",
+      "returnsRef": "KillByNameResult"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "id": "echo",
+  "name": "Echo 测试",
+  "version": "0.1.0",
+  "description": "Phase 1 验证插件：把输入原样回显，验证加新工具只改 5 处",
+  "author": "DevToolkit Team",
+  "category": "Other",
+  "icon": "MessageSquare",
+  "entry": "./index.tsx",
+  "capabilities": [],
+  "windowWidth": 480,
+  "windowHeight": 320,
+  "commands": [
+    {
+      "name": "echo",
+      "argsRef": "EchoArgs",
+      "returnsRef": "EchoResult"
+    }
+  ]
+}

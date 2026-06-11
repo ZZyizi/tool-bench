@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { Box, Search, Settings, Zap, type LucideIcon } from 'lucide-react';
+import { Search, Settings, Zap, type LucideIcon } from 'lucide-react';
 import { globalRegistry } from '../plugins/registry';
 import { useSettings } from '../settings';
 import type { Plugin } from '../plugins/types';
+import { resolveIcon } from '../plugins/resolveIcon';
 import './Launcher.css';
 
 interface LauncherProps {
@@ -102,7 +103,7 @@ export function Launcher({ onOpenSettings }: LauncherProps) {
             <div className="launcher__tiles">
               {plugins.map((plugin) => {
                 const isOpening = opening === plugin.manifest.id;
-                const Icon = (plugin.manifest.icon ?? Box) as LucideIcon;
+                const Icon = resolveIcon(plugin.manifest.icon) as LucideIcon;
                 return (
                   <div key={plugin.manifest.id} className="launcher__tile">
                     <button

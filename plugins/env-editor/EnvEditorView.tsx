@@ -21,15 +21,15 @@ import {
   X,
 } from 'lucide-react';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { api } from '../../api';
-import { ConfirmDialog } from '../../../components/ConfirmDialog';
+import { envEditorApi } from '../../src/plugins/api.gen';
+import { ConfirmDialog } from '../../src/components/ConfirmDialog';
 import type {
   EnvSnapshot,
   EnvVar,
   PresetKind,
   PresetResult,
   Scope,
-} from '../../../types';
+} from '../../src/types';
 import './EnvEditorView.css';
 
 type Tab = 'env' | 'path' | 'presets';
@@ -74,7 +74,7 @@ export function EnvEditorView() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.listEnv();
+      const data = await envEditorApi.listEnv();
       setSnapshot(data);
       if (data.warnings.length > 0) {
         showToast('error', data.warnings.join('；'));
@@ -204,7 +204,7 @@ function EnvTab({
   const handleDelete = useCallback(
     async (v: EnvVar) => {
       try {
-        await api.deleteVar(v.scope, v.name);
+        await envEditorApi.deleteUserVar({ scope: v.scope, name: v.name });
         showToast('success', `已删除 ${v.name} (${v.scope === 'user' ? '用户' : '系统'})`);
         setPendingDelete(null);
         await onChanged();
@@ -354,7 +354,7 @@ function AddEditDialog({
     }
     setSaving(true);
     try {
-      await api.setVar(scope, name, value);
+      await envEditorApi.setUserVar({ scope, name, value });
       showToast(
         'success',
         isNew
@@ -550,7 +550,7 @@ function PathTab({
   const save = useCallback(async () => {
     setSaving(true);
     try {
-      await api.setPathEntries(scope, entries);
+      await envEditorApi.setPathEntries({ scope, entries });
       showToast('success', `PATH (${scope === 'user' ? '用户' : '系统'}) 已保存 (${entries.length} 项)`);
       await onChanged();
     } catch (e) {
@@ -689,7 +689,7 @@ function PresetsTab({
           setPicking(null);
           return;
         }
-        const result = await api.detectPreset(kind, selected);
+        const result = await envEditorApi.detectPreset({ kind, dir: selected });
         setPreview(result);
       } catch (e) {
         showToast('error', `探测失败: ${String(e)}`);
@@ -705,7 +705,7 @@ function PresetsTab({
     setApplying(true);
     try {
       const plan = { ...preview.plan, scope };
-      const r = await api.applyPreset(plan);
+      const r = await envEditorApi.applyPreset(plan);
       showToast('success', `已应用 (${r.applied.length} 项)`);
       setConfirming(false);
       setPreview(null);

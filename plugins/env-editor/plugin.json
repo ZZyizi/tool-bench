@@ -1,0 +1,45 @@
+{
+  "id": "env-editor",
+  "name": "环境变量",
+  "version": "0.1.0",
+  "description": "查看、修改用户环境变量；一键配置 Java / Python / Node / Go / Rust",
+  "author": "DevToolkit Team",
+  "category": "System",
+  "icon": "Settings2",
+  "entry": "./index.tsx",
+  "capabilities": ["env:read", "env:write"],
+  "windowWidth": 800,
+  "windowHeight": 560,
+  "commands": [
+    {
+      "name": "list_env",
+      "argsRef": "void",
+      "returnsRef": "EnvSnapshot"
+    },
+    {
+      "name": "set_user_var",
+      "argsRef": "SetUserVarArgs",
+      "returnsRef": "void"
+    },
+    {
+      "name": "delete_user_var",
+      "argsRef": "DeleteUserVarArgs",
+      "returnsRef": "void"
+    },
+    {
+      "name": "set_path_entries",
+      "argsRef": "SetPathEntriesArgs",
+      "returnsRef": "void"
+    },
+    {
+      "name": "detect_preset",
+      "argsRef": "DetectPresetArgs",
+      "returnsRef": "PresetResult"
+    },
+    {
+      "name": "apply_preset",
+      "argsRef": "PresetPlan",
+      "returnsRef": "ApplyResult"
+    }
+  ]
+}

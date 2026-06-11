@@ -583,10 +583,9 @@ fn apply_preset_inner(plan: PresetPlan) -> Result<ApplyResult, EnvError> {
     Ok(ApplyResult { applied, warnings })
 }
 
-// -------------------- Tauri command wrappers --------------------
+// -------------------- Pure command logic (no tauri::State) --------------------
 
-#[tauri::command]
-pub fn list_env() -> Result<EnvSnapshot, String> {
+pub fn list_env_inner() -> Result<EnvSnapshot, String> {
     #[cfg(windows)]
     {
         read_env_snapshot().map_err(Into::into)
@@ -597,11 +596,10 @@ pub fn list_env() -> Result<EnvSnapshot, String> {
     }
 }
 
-#[tauri::command]
-pub fn set_var_cmd(scope: Scope, name: String, value: String) -> Result<(), String> {
+pub fn set_var_inner(scope: Scope, name: &str, value: &str) -> Result<(), String> {
     #[cfg(windows)]
     {
-        set_var(scope, &name, &value).map_err(Into::into)
+        set_var(scope, name, value).map_err(Into::into)
     }
     #[cfg(not(windows))]
     {
@@ -610,11 +608,10 @@ pub fn set_var_cmd(scope: Scope, name: String, value: String) -> Result<(), Stri
     }
 }
 
-#[tauri::command]
-pub fn delete_var_cmd(scope: Scope, name: String) -> Result<(), String> {
+pub fn delete_var_inner(scope: Scope, name: &str) -> Result<(), String> {
     #[cfg(windows)]
     {
-        delete_var(scope, &name).map_err(Into::into)
+        delete_var(scope, name).map_err(Into::into)
     }
     #[cfg(not(windows))]
     {
@@ -623,11 +620,10 @@ pub fn delete_var_cmd(scope: Scope, name: String) -> Result<(), String> {
     }
 }
 
-#[tauri::command]
-pub fn set_path_entries_cmd(scope: Scope, entries: Vec<String>) -> Result<(), String> {
+pub fn set_path_entries_inner(scope: Scope, entries: &[String]) -> Result<(), String> {
     #[cfg(windows)]
     {
-        set_path_entries(scope, &entries).map_err(Into::into)
+        set_path_entries(scope, entries).map_err(Into::into)
     }
     #[cfg(not(windows))]
     {
@@ -636,15 +632,14 @@ pub fn set_path_entries_cmd(scope: Scope, entries: Vec<String>) -> Result<(), St
     }
 }
 
-#[tauri::command]
-pub fn detect_preset_cmd(kind: PresetKind, dir: String) -> Result<PresetResult, String> {
+pub fn detect_preset_inner_cmd(kind: PresetKind, dir: &str) -> Result<PresetResult, String> {
     #[cfg(windows)]
     {
-        let path = PathBuf::from(&dir);
+        let path = PathBuf::from(dir);
         if !path.is_dir() {
             return Err(EnvError::PresetDetectionFailed {
                 preset: preset_name(kind),
-                dir: dir.clone(),
+                dir: dir.to_string(),
                 reason: "directory does not exist".into(),
             }
             .into());
@@ -662,6 +657,95 @@ pub fn detect_preset_cmd(kind: PresetKind, dir: String) -> Result<PresetResult, 
         let _ = (kind, dir);
         Err(EnvError::UnsupportedOnThisPlatform.into())
     }
+}
+
+pub fn apply_preset_inner_cmd(plan: PresetPlan) -> Result<ApplyResult, String> {
+    #[cfg(windows)]
+    {
+        apply_preset_inner(plan).map_err(Into::into)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = plan;
+        Err(EnvError::UnsupportedOnThisPlatform.into())
+    }
+}
+
+// -------------------- Dispatch wrappers + register --------------------
+//
+// Commands are no longer individually registered with `#[tauri::command]` —
+// the frontend reaches them via `dispatch` in cmd/dispatch.rs.
+
+use serde_json::Value;
+
+#[derive(Deserialize)]
+struct SetUserVarArgs {
+    scope: Scope,
+    name: String,
+    value: String,
+}
+
+#[derive(Deserialize)]
+struct DeleteUserVarArgs {
+    scope: Scope,
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct SetPathEntriesArgs {
+    scope: Scope,
+    entries: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct DetectPresetArgs {
+    kind: PresetKind,
+    dir: String,
+}
+
+fn list_env_dispatch(_args: Value) -> Result<Value, String> {
+    serde_json::to_value(list_env_inner()?).map_err(|e| e.to_string())
+}
+
+fn set_user_var_dispatch(args: Value) -> Result<Value, String> {
+    let a: SetUserVarArgs = super::dispatch::parse_args(args)?;
+    set_var_inner(a.scope, &a.name, &a.value)?;
+    Ok(Value::Null)
+}
+
+fn delete_user_var_dispatch(args: Value) -> Result<Value, String> {
+    let a: DeleteUserVarArgs = super::dispatch::parse_args(args)?;
+    delete_var_inner(a.scope, &a.name)?;
+    Ok(Value::Null)
+}
+
+fn set_path_entries_dispatch(args: Value) -> Result<Value, String> {
+    let a: SetPathEntriesArgs = super::dispatch::parse_args(args)?;
+    set_path_entries_inner(a.scope, &a.entries)?;
+    Ok(Value::Null)
+}
+
+fn detect_preset_dispatch(args: Value) -> Result<Value, String> {
+    let a: DetectPresetArgs = super::dispatch::parse_args(args)?;
+    serde_json::to_value(detect_preset_inner_cmd(a.kind, &a.dir)?)
+        .map_err(|e| e.to_string())
+}
+
+fn apply_preset_dispatch(args: Value) -> Result<Value, String> {
+    let plan: PresetPlan = super::dispatch::parse_args(args)?;
+    serde_json::to_value(apply_preset_inner_cmd(plan)?).map_err(|e| e.to_string())
+}
+
+/// Register all env commands. Names are deliberately distinct from the inner
+/// function names ("set_user_var" vs `set_var_inner`) so the public command
+/// name matches the TS API contract on the frontend.
+pub fn register(r: &mut super::dispatch::CommandRegistry) {
+    r.register("list_env", list_env_dispatch);
+    r.register("set_user_var", set_user_var_dispatch);
+    r.register("delete_user_var", delete_user_var_dispatch);
+    r.register("set_path_entries", set_path_entries_dispatch);
+    r.register("detect_preset", detect_preset_dispatch);
+    r.register("apply_preset", apply_preset_dispatch);
 }
 
 #[cfg(windows)]
@@ -704,19 +788,6 @@ fn derive_idempotent_warnings(plan: &PresetPlan) -> Vec<String> {
         }
     }
     warnings
-}
-
-#[tauri::command]
-pub fn apply_preset_cmd(plan: PresetPlan) -> Result<ApplyResult, String> {
-    #[cfg(windows)]
-    {
-        apply_preset_inner(plan).map_err(Into::into)
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = plan;
-        Err(EnvError::UnsupportedOnThisPlatform.into())
-    }
 }
 
 // -------------------- Tests --------------------

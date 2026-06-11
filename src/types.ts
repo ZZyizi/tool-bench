@@ -79,3 +79,52 @@ export interface ApplyResult {
   applied: string[];
   warnings: string[];
 }
+
+// ---- dispatch arg shapes ----
+//
+// These are the JSON payloads sent to the `dispatch` Tauri command. Each
+// plugin command in plugin.json references one of these via argsRef; the
+// Rust wrapper deserializes the same shape on the other side.
+
+export interface ListPortsArgs {
+  query?: string;
+}
+
+export interface KillPortArgs {
+  port: number;
+}
+
+export interface KillByNameArgs {
+  name: string;
+}
+
+export interface SetUserVarArgs {
+  scope: Scope;
+  name: string;
+  value: string;
+}
+
+export interface DeleteUserVarArgs {
+  scope: Scope;
+  name: string;
+}
+
+export interface SetPathEntriesArgs {
+  scope: Scope;
+  entries: string[];
+}
+
+export interface DetectPresetArgs {
+  kind: PresetKind;
+  dir: string;
+}
+
+// ---- echo plugin (Phase 1 verification) ----
+
+export interface EchoArgs {
+  message: string;
+}
+
+export interface EchoResult {
+  message: string;
+}

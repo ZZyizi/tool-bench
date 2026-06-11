@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Eraser } from 'lucide-react';
-import { api } from '../../api';
-import { ConfirmDialog } from '../../../components/ConfirmDialog';
-import type { PortInfo } from '../../../types';
+import { portManagerApi } from '../../src/plugins/api.gen';
+import { ConfirmDialog } from '../../src/components/ConfirmDialog';
+import type { PortInfo } from '../../src/types';
 import { ProcessPickerDialog } from './ProcessPickerDialog';
 import './PortView.css';
 
@@ -23,7 +23,7 @@ export function PortView() {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.listPorts(query);
+      const data = await portManagerApi.listPorts({ query });
       setPorts(data.ports);
       setHiddenSystemCount(data.hidden_system);
       setSelected((prev) =>
@@ -54,7 +54,7 @@ export function PortView() {
     setConfirming(false);
     setActionMessage(null);
     try {
-      const result = await api.killPort(selected.port);
+      const result = await portManagerApi.killPort({ port: selected.port });
       setActionMessage({
         kind: result.success ? 'success' : 'error',
         text: result.message,
@@ -71,7 +71,7 @@ export function PortView() {
     setBulkKilling(true);
     setActionMessage(null);
     try {
-      const result = await api.killByProcessName(pendingName);
+      const result = await portManagerApi.killByProcessName({ name: pendingName });
       setActionMessage({
         kind: result.success ? 'success' : 'error',
         text: result.message,
