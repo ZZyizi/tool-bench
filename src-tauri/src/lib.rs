@@ -77,6 +77,7 @@ pub fn run() {
             cmd::settings::get_settings,
             cmd::settings::set_settings,
             cmd::settings::set_recording_mode,
+            cmd::plugin_loader::scan_user_plugins,
             crate::windows_hook::get_hook_diagnostics,
         ])
         .run(tauri::generate_context!())

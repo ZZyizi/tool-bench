@@ -351,6 +351,125 @@ npm run codegen
 - **不要**直接 `import './styles.css'` 全局污染。每个插件的样式放在自己目录里、用 CSS module 或 inline style
 - **不要**改 `lib.rs` 的 `invoke_handler!` 列表 —— plugin command 全部走 dispatch
 
+## 4. 用户目录动态加载（无需重新发布主应用）
+
+`~/.tool-bench/user-plugins/<id>/` 里的插件**启动时自动扫描一次**，重启应用即生效。**0 Rust 改动、0 主项目 PR、0 重新发布主应用**。和内置插件共用同一个 `globalRegistry`。
+
+### 4.1 用户插件目录在哪
+
+| 平台 | 路径 |
+|---|---|
+| Windows | `%APPDATA%\com.toolBench.app\user-plugins\` |
+| macOS | `~/Library/Application Support/com.toolBench.app/user-plugins/` |
+| Linux | `~/.config/com.toolBench.app/user-plugins/` |
+
+目录不存在 → 启动时静默跳过（不报错）。
+
+### 4.2 插件格式
+
+```
+user-plugins/
+└── my-sticky-notes/                ← 一个插件一个目录
+    ├── plugin.json                 ← manifest（与内置插件 schema 相同）
+    └── index.js                    ← **预构建的 ESM**（默认入口）
+```
+
+**关键差异**：`index.js` 必须是**自包含的 ES Module**，**不能有 bare import**（`'react'`、`'lucide-react'` 之类）。用 Vite / esbuild 把所有依赖打进单文件即可。
+
+最小可运行的 `.tsx` + `esbuild` 模板（10 行配置）：
+
+```bash
+npm i -D esbuild
+# build.mjs
+esbuild src/index.tsx \
+  --bundle --format=esm --jsx=automatic \
+  --outfile=dist/index.js
+```
+
+跑 `node build.mjs` → 把 `dist/` 整个文件夹丢到 `user-plugins/<id>/` 即可。
+
+### 4.3 最小可运行的 `index.js`（无 React 依赖）
+
+裸写一个**完全自包含**的 ESM，不需要任何构建步骤：
+
+```js
+// user-plugins/my-test/index.js
+export default {
+  manifest: {
+    id: 'my-test',
+    name: 'My Test',
+    version: '0.1.0',
+    description: 'A no-op test plugin',
+    author: 'me',
+    category: 'Other',
+  },
+  // 没有 React = 没有 UI；开工具窗会看到空白。改用 Vite 预构建的
+  // ESM 就能正常渲染 React 组件。
+  Component: () => null,
+  activate(ctx) { ctx.log('hi from my-test'); },
+};
+```
+
+```json
+// user-plugins/my-test/plugin.json
+{ "id": "my-test", "name": "My Test", "version": "0.1.0", "description": "A no-op test plugin", "author": "me", "category": "Other" }
+```
+
+重启 app → Sidebar / Launcher / QuickSwitcher 自动出现 "My Test"。
+
+### 4.4 走 `systemApi` 的真实例子（便签 / 番茄钟 / 片段管理）
+
+第 3 节是给内置插件用的；用户插件调 systemApi **完全相同**：
+
+```js
+// user-plugins/my-sticky-notes/index.js（已预构建）
+import { systemApi /* 由宿主 bundle 提供 */ } from 'tool-bench/api.gen';
+// ↑ 实际上你预构建时需要让 Vite 把它 inline；常见做法是把 systemApi
+// 视为全局 window.__systemApi__，见下方 §4.5
+
+const dirHandle = /* 用户选的目录 */;
+const noteFile = (id) => `${dirHandle}/${id}.md`;
+
+export default {
+  manifest: { id: 'my-sticky-notes', name: '便签', /* ... */ },
+  Component: StickyNotesView,
+  activate(ctx) { ctx.log('sticky notes activated'); },
+};
+```
+
+### 4.5 一个真实问题：`import` 在 blob URL 下不解析
+
+预构建的 ESM 通过 `URL.createObjectURL` + `import()` 加载。**bare import**（如 `import { systemApi } from '...'`）在 blob URL 上下文里**没有 resolver**。
+
+实际可行的两种策略：
+
+**(a) 全部 inline**（推荐，~500KB per plugin）：用 Vite 把 React + lucide-react + 你的代码全 bundle 进单文件 `index.js`。代价是每插件都带一份 React。
+
+**(b) 用 global**（轻量，~10KB per plugin）：宿主把 React、lucide-react、`systemApi` 挂到 `window` 上；用户插件直接 `const React = window.React;`。代价是用户不能 tree-shake。
+
+第 (a) 种对应「写好一个工具箱项目 → `npm run build` → 复制 dist 到 user-plugins」。第 (b) 种对应「在 dev 工具里手写小程序」。
+
+> 当前 v0.3.0 走的是 (a) 的简化版：用户自己 Vite / esbuild 预构建，自包含。宿主不暴露任何 global。
+> 后续 v0.3.1+ 会加 (b) 的 global 暴露，作为「手写 5 行 JS 就能上线」的快捷路径。
+
+### 4.6 失败模式（控制台会 warn）
+
+| 情况 | 表现 |
+|---|---|
+| `user-plugins/<id>/` 缺 `plugin.json` | 跳过 |
+| `plugin.json` 解析失败 | 跳过 + warn |
+| `plugin.json` 缺 `id` | 跳过 + warn |
+| `entry` 指向的文件不存在 | 跳过 + warn |
+| `index.js` 语法错 / 抛异常 | 跳过 + warn |
+| `index.js` 没有 `default` export | 跳过 + warn |
+| `default.manifest.id` 跟内置插件冲突 | 跳过 + warn（内置优先） |
+| `default.manifest` 缺 `id` | 跳过 + warn |
+
+### 4.7 重启即生效，无热重载
+
+- 添加 / 删除 / 修改用户插件 → **重启 app** → 重新扫描
+- 不引入文件监听 / 进程内 hot-reload（v0.3.0 不做）
+
 ---
 
 ## 5. 检查清单
