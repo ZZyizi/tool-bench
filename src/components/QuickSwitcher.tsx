@@ -1,0 +1,332 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Box, Pin, PinOff, Search, X, Zap } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { globalRegistry } from '../plugins/registry';
+import { useSettings } from '../settings';
+import './QuickSwitcher.css';
+
+type Item = {
+  id: string;
+  name: string;
+  description: string;
+  icon: LucideIcon;
+  pluginId: string;
+};
+
+const TOOL_PREFIX = 'tool:';
+const CELL_PX = 96; // width of one cell — keep in sync with .qs__cell CSS
+
+function buildToolItems(): Item[] {
+  return globalRegistry.list().map((plugin) => ({
+    id: `${TOOL_PREFIX}${plugin.manifest.id}`,
+    pluginId: plugin.manifest.id,
+    name: plugin.manifest.name,
+    description: plugin.manifest.description,
+    icon: (plugin.manifest.icon ?? Box) as LucideIcon,
+  }));
+}
+
+function score(query: string, name: string): number {
+  // Lower is better. Used to rank search results.
+  const q = query.toLowerCase();
+  const n = name.toLowerCase();
+  if (n === q) return 0;
+  if (n.startsWith(q)) return 1;
+  const idx = n.indexOf(q);
+  if (idx >= 0) return 2 + idx;
+  return Number.POSITIVE_INFINITY;
+}
+
+export function QuickSwitcher() {
+  const [settings, setSettings] = useSettings();
+  const [query, setQuery] = useState('');
+  const [toolItems] = useState<Item[]>(() => buildToolItems());
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [colCount, setColCount] = useState(1);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  // Focus the search field on mount. The window is always-on-top and
+  // decorations=false, so users expect to start typing the moment Alt+Space
+  // is released.
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  // Track the grid's actual width so keyboard navigation can convert
+  // a 1-D index into (row, col) correctly. The grid uses `auto-fill` so the
+  // column count depends on the current window width.
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const w = entry.contentRect.width;
+      setColCount(Math.max(1, Math.floor((w + 4) / CELL_PX)));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Build the visible list. When the search box is empty, show pinned items
+  // in their pinned order. When non-empty, replace the view with search
+  // results across the registered tools, ranked by score.
+  const visible: Item[] = useMemo(() => {
+    if (query.trim() === '') {
+      const byId = new Map<string, Item>();
+      for (const t of toolItems) byId.set(t.id, t);
+      return settings.pinnedApps
+        .map((id) => byId.get(id))
+        .filter((x): x is Item => Boolean(x));
+    }
+    const q = query.trim();
+    const scored = toolItems
+      .map((item) => ({ item, s: score(q, item.name) }))
+      .filter((x) => x.s !== Number.POSITIVE_INFINITY)
+      .sort((a, b) => a.s - b.s);
+    return scored.slice(0, 64).map((x) => x.item);
+  }, [query, toolItems, settings.pinnedApps]);
+
+  // Reset the active index whenever the visible list changes shape.
+  useEffect(() => {
+    setActiveIndex((i) => (i >= visible.length ? 0 : i));
+  }, [visible.length]);
+
+  const closeWindow = useCallback(async () => {
+    console.log('[qs] closeWindow called');
+    try {
+      await getCurrentWebviewWindow().hide();
+      console.log('[qs] window hidden');
+    } catch (e) {
+      console.error('[qs] failed to hide window', e);
+    }
+  }, []);
+
+  // Window-level Escape — survives mouse clicks that move focus off the
+  // search input (e.g. clicking a cell). Both window/document + keydown/keyup
+  // to survive any WebView2 / Tauri event-layer quirk.
+  useEffect(() => {
+    console.log('[qs] registering window-level Escape listeners');
+    const isEsc = (e: KeyboardEvent) =>
+      e.key === 'Escape' || e.key === 'Esc' || e.keyCode === 27;
+    const onKey = (e: KeyboardEvent) => {
+      console.log('[qs] window-level key event', { key: e.key, code: e.code, keyCode: e.keyCode, type: e.type, target: (e.target as HTMLElement)?.tagName });
+      if (isEsc(e)) {
+        console.log('[qs] window-level Escape detected, hiding');
+        e.preventDefault();
+        e.stopPropagation();
+        void closeWindow();
+      }
+    };
+    window.addEventListener('keydown', onKey, { capture: true });
+    document.addEventListener('keydown', onKey, { capture: true });
+    window.addEventListener('keyup', onKey, { capture: true });
+    return () => {
+      console.log('[qs] unregistering window-level Escape listeners');
+      window.removeEventListener('keydown', onKey, { capture: true });
+      document.removeEventListener('keydown', onKey, { capture: true });
+      window.removeEventListener('keyup', onKey, { capture: true });
+    };
+  }, [closeWindow]);
+
+  const launchItem = useCallback(
+    async (item: Item, useAndGo: boolean) => {
+      setError(null);
+      try {
+        const plugin = globalRegistry.get(item.pluginId);
+        if (!plugin) throw new Error(`tool "${item.pluginId}" not registered`);
+        await invoke('open_tool_window', {
+          pluginId: item.pluginId,
+          title: plugin.manifest.name,
+          width: plugin.manifest.windowWidth ?? null,
+          height: plugin.manifest.windowHeight ?? null,
+          useAndGo,
+        });
+        if (useAndGo) {
+          await closeWindow();
+        }
+      } catch (e) {
+        setError(String(e));
+      }
+    },
+    [closeWindow],
+  );
+
+  const togglePin = useCallback(
+    (item: Item) => {
+      const ids = settings.pinnedApps;
+      if (ids.includes(item.id)) {
+        setSettings({
+          ...settings,
+          pinnedApps: ids.filter((x) => x !== item.id),
+        });
+      } else {
+        setSettings({
+          ...settings,
+          pinnedApps: [...ids, item.id],
+        });
+      }
+    },
+    [settings, setSettings],
+  );
+
+  const moveActive = useCallback(
+    (deltaRow: number, deltaCol: number) => {
+      if (visible.length === 0) return;
+      setActiveIndex((i) => {
+        const row = Math.floor(i / colCount);
+        const col = i % colCount;
+        const newRow = Math.max(0, Math.min(Math.floor((visible.length - 1) / colCount), row + deltaRow));
+        const newCol = Math.max(0, Math.min(colCount - 1, col + deltaCol));
+        const next = newRow * colCount + newCol;
+        return Math.min(next, visible.length - 1);
+      });
+    },
+    [colCount, visible.length],
+  );
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    console.log('[qs] input onKeyDown', { key: e.key, code: e.code, keyCode: e.keyCode, type: e.type });
+    if (e.key === 'Escape' || e.key === 'Esc' || e.keyCode === 27) {
+      console.log('[qs] input Escape detected, hiding');
+      e.preventDefault();
+      void closeWindow();
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      moveActive(1, 0);
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      moveActive(-1, 0);
+      return;
+    }
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      moveActive(0, 1);
+      return;
+    }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      moveActive(0, -1);
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const item = visible[activeIndex];
+      if (item) void launchItem(item, false);
+      return;
+    }
+  };
+
+  const clearQuery = () => {
+    setQuery('');
+    inputRef.current?.focus();
+  };
+
+  const isPinned = (id: string) => settings.pinnedApps.includes(id);
+  const showEmptyHint = query.trim() === '' && visible.length === 0;
+  const showNoMatch = query.trim() !== '' && visible.length === 0;
+
+  return (
+    <div className="qs">
+      <div className="qs__row qs__row--input">
+        <Search size={16} className="qs__search-icon" aria-hidden />
+        <input
+          ref={inputRef}
+          className="qs__input"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder={
+            query.trim() === ''
+              ? '搜索工具...  (↑↓←→ 移动 · Enter 打开 · Esc 关闭)'
+              : '输入中...  (✕ 清空恢复已固定)'
+          }
+          spellCheck={false}
+          autoComplete="off"
+        />
+        {query && (
+          <button
+            type="button"
+            className="qs__clear"
+            onClick={clearQuery}
+            aria-label="清空搜索"
+            title="清空"
+          >
+            <X size={14} aria-hidden />
+          </button>
+        )}
+      </div>
+
+      <div className="qs__row qs__row--result" ref={gridRef} role="listbox" aria-label="搜索结果">
+        {visible.length > 0 ? (
+          <div className="qs__grid">
+            {visible.map((item, i) => {
+              const Icon = item.icon;
+              const active = i === activeIndex;
+              const pinned = isPinned(item.id);
+              return (
+                <div
+                  key={item.id}
+                  className={`qs__cell${active ? ' qs__cell--active' : ''}`}
+                  role="option"
+                  aria-selected={active}
+                  tabIndex={-1}
+                  onMouseEnter={() => setActiveIndex(i)}
+                  onClick={() => void launchItem(item, false)}
+                >
+                  <div className="qs__cell-actions">
+                    <button
+                      type="button"
+                      className="qs__cell-action"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        togglePin(item);
+                      }}
+                      aria-label={pinned ? '取消固定' : '固定'}
+                      title={pinned ? '取消固定' : '固定'}
+                    >
+                      {pinned ? <PinOff size={12} aria-hidden /> : <Pin size={12} aria-hidden />}
+                    </button>
+                    <button
+                      type="button"
+                      className="qs__cell-action"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void launchItem(item, true);
+                      }}
+                      aria-label="即开即用"
+                      title="即开即用：打开后自动关闭窗口"
+                    >
+                      <Zap size={12} aria-hidden />
+                    </button>
+                  </div>
+                  <div className="qs__cell-icon" aria-hidden>
+                    <Icon size={32} strokeWidth={1.5} />
+                  </div>
+                  <div className="qs__cell-name" title={item.name}>
+                    {item.name}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : showNoMatch ? (
+          <div className="qs__hint">没有匹配的工具</div>
+        ) : showEmptyHint ? (
+          <div className="qs__hint">
+            <Pin size={14} className="qs__hint-icon" aria-hidden />
+            <span>还没有固定任何工具。搜索后用 Pin 图标固定。</span>
+          </div>
+        ) : null}
+      </div>
+
+      {error && <div className="qs__error">{error}</div>}
+    </div>
+  );
+}

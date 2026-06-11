@@ -1,0 +1,12 @@
+[plugin]
+id = "port-manager"
+name = "端口管理"
+version = "0.1.0"
+description = "查看和释放系统占用的端口"
+author = "DevToolkit Team"
+category = "Network"
+icon = "🔌"
+entry = "./index.ts"
+
+[plugin.capabilities]
+required = ["network:read", "process:read", "process:kill"]

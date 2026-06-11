@@ -1,51 +1,51 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { useState, useEffect } from 'react';
+import { Sidebar } from './components/Sidebar';
+import { StatusBar } from './components/StatusBar';
+import { Launcher } from './components/Launcher';
+import { SettingsPanel } from './components/SettingsPanel';
+import { globalRegistry } from './plugins/registry';
+import { useSettings } from './settings';
+import './plugins/builtin';
+import './App.css';
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
-
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+export default function App() {
+  const [settings] = useSettings();
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    <>
+      {settings.mode === 'desktop' ? (
+        <Launcher onOpenSettings={() => setSettingsOpen(true)} />
+      ) : (
+        <EmbeddedApp onOpenSettings={() => setSettingsOpen(true)} />
+      )}
+      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+    </>
   );
 }
 
-export default App;
+function EmbeddedApp({ onOpenSettings }: { onOpenSettings: () => void }) {
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [renderKey, setRenderKey] = useState(0);
+
+  useEffect(() => {
+    const all = globalRegistry.list();
+    if (all.length > 0 && activeId === null) {
+      setActiveId(all[0].manifest.id);
+      setRenderKey((k) => k + 1);
+    }
+  }, [activeId]);
+
+  const active = activeId ? globalRegistry.get(activeId) : null;
+  const ActiveComponent = active?.Component;
+
+  return (
+    <div className="app">
+      <Sidebar activeId={activeId} onSelect={setActiveId} onOpenSettings={onOpenSettings} />
+      <main className="app__main" key={renderKey}>
+        {ActiveComponent ? <ActiveComponent /> : <div className="app__empty">选择一个工具开始</div>}
+      </main>
+      <StatusBar />
+    </div>
+  );
+}

@@ -1,0 +1,249 @@
+/* Outer wrapper that fills the frameless window. -webkit-app-region
+   splits the surface into drag / no-drag regions:
+   - drag: qs-drag-root padding, the input row (titlebar-style),
+     the result row's empty space (gaps between cells, the hint
+     text), and the error strip
+   - no-drag: the input field, the clear button, every grid cell,
+     and the pin/zap action buttons (so clicks reach them) */
+.qs-drag-root {
+  height: 100vh;
+  padding: 6px;
+  box-sizing: border-box;
+  background: transparent;
+  -webkit-app-region: drag;
+  -webkit-font-smoothing: antialiased;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--fg);
+  font-size: 14px;
+  overflow: hidden;
+  display: flex;
+  user-select: none;
+}
+
+/* The visual card. box-sizing: border-box is critical: with content-box,
+   `height: 100%` + 1px border on each side exceeded the parent's content
+   box and the input row overlapped the result row. */
+.qs {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: rgba(36, 36, 36, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.2);
+  animation: qs-appear 120ms ease-out;
+  -webkit-app-region: no-drag;
+}
+
+@keyframes qs-appear {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.qs__row {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.qs__row--input {
+  height: 48px;
+  padding: 0 14px;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+}
+
+.qs__row--result {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 10px;
+  align-items: stretch;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-app-region: drag;
+}
+
+.qs__search-icon {
+  color: var(--fg-muted);
+  flex-shrink: 0;
+}
+
+.qs__input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--fg);
+  font-size: 14px;
+  font-family: inherit;
+  caret-color: var(--accent);
+  padding: 0;
+  -webkit-app-region: no-drag;
+}
+
+.qs__input::placeholder {
+  color: var(--fg-muted);
+  font-size: 12.5px;
+}
+
+.qs__clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  border: 0;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 80ms ease, color 80ms ease;
+  -webkit-app-region: no-drag;
+}
+
+.qs__clear:hover {
+  background: var(--row-hover);
+  color: var(--fg);
+}
+
+/* Result grid: auto-fill columns of CELL_PX width (96px in JS) so keyboard
+   navigation can derive the column count from a ResizeObserver. */
+.qs__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 4px;
+  width: 100%;
+}
+
+.qs__cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 88px;
+  padding: 8px 6px 6px;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--fg);
+  outline: 1px solid transparent;
+  outline-offset: -1px;
+  transition: background 80ms ease, outline-color 80ms ease;
+  user-select: none;
+  -webkit-app-region: no-drag;
+}
+
+.qs__cell:hover {
+  background: var(--row-hover);
+}
+
+.qs__cell--active {
+  background: var(--row-selected);
+  outline-color: var(--accent);
+}
+
+.qs__cell-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.qs__cell-name {
+  font-size: 11.5px;
+  line-height: 1.3;
+  text-align: center;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg);
+}
+
+/* Hover-revealed action buttons in the top-right corner. Visible on cell
+   hover and on the active cell. */
+.qs__cell-actions {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 100ms ease;
+  pointer-events: none;
+}
+
+.qs__cell:hover .qs__cell-actions,
+.qs__cell--active .qs__cell-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.qs__cell-action {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 80ms ease, border-color 80ms ease, background 80ms ease;
+  -webkit-app-region: no-drag;
+}
+
+.qs__cell-action:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+}
+
+.qs__hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 20px;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  width: 100%;
+  height: 100%;
+}
+
+.qs__hint-icon {
+  color: var(--fg-muted);
+  flex-shrink: 0;
+}
+
+.qs__error {
+  padding: 6px 14px;
+  font-size: 11.5px;
+  color: var(--error);
+  background: rgba(255, 85, 85, 0.08);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
