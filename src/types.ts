@@ -49,10 +49,6 @@ export interface InstalledApps {
   scanned_at_ms: number;
 }
 
-export interface PinnedApps {
-  ids: string[];
-}
-
 export type VarSource = 'user' | 'process' | 'system';
 export type Scope = 'user' | 'system';
 

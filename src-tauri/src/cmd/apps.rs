@@ -93,7 +93,7 @@ pub fn scan_installed_apps() -> Result<InstalledApps, AppsError> {
         });
     }
 
-    apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    apps.sort_by_key(|a| a.name.to_lowercase());
     apps.dedup_by(|a, b| a.id == b.id);
 
     Ok(InstalledApps { apps, scanned_at_ms })
@@ -137,7 +137,7 @@ pub fn scan_installed_apps() -> Result<InstalledApps, AppsError> {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0);
-    apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    apps.sort_by_key(|a| a.name.to_lowercase());
     apps.dedup_by(|a, b| a.id == b.id);
     Ok(InstalledApps { apps, scanned_at_ms })
 }

@@ -1,4 +1,4 @@
-use crate::platform::port_scanner::{PortInfo, Protocol};
+use crate::platform::port_scanner::PortInfo;
 use serde::Serialize;
 use tauri::State;
 
@@ -196,6 +196,7 @@ pub fn kill_port(port: u16, state: State<'_, AppState>) -> Result<KillResult, St
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::platform::port_scanner::Protocol;
 
     fn make_port(port: u16, pid: u32, name: Option<&str>) -> PortInfo {
         PortInfo {

@@ -7,7 +7,6 @@ import type {
   InstalledApps,
   KillByNameResult,
   KillResult,
-  PinnedApps,
   PresetKind,
   PresetPlan,
   PresetResult,
@@ -23,10 +22,6 @@ export const api = {
 
   listInstalledApps: () => invoke<InstalledApps>('list_installed_apps'),
   launchApp: (target: string) => invoke<void>('launch_app', { target }),
-
-  getPinnedApps: () => invoke<PinnedApps>('get_pinned_apps'),
-  setPinnedApps: (apps: PinnedApps) =>
-    invoke<PinnedApps>('set_pinned_apps', { apps }),
 
   openQuickSwitcher: () => invoke<void>('open_quick_switcher'),
 

@@ -9,17 +9,14 @@ function isEscape(e: KeyboardEvent): boolean {
 
 export function QuickSwitcherRoot() {
   const hideWindow = useCallback(async () => {
-    console.log('[qs-root] hideWindow called');
     try {
       await getCurrentWebviewWindow().hide();
-      console.log('[qs-root] window hidden');
     } catch (e) {
       console.error('[qs-root] hide failed', e);
     }
   }, []);
 
   useEffect(() => {
-    console.log('[qs-root] registering Escape listeners');
     // Expose diagnostic: in DevTools console, type __hookDiag() to see LL hook state.
     (window as any).__hookDiag = async () => {
       const diag = await invoke('get_hook_diagnostics');
@@ -28,9 +25,7 @@ export function QuickSwitcherRoot() {
     };
 
     const onKey = (e: KeyboardEvent) => {
-      console.log('[qs-root] key event', { key: e.key, code: e.code, keyCode: e.keyCode, type: e.type, target: (e.target as HTMLElement)?.tagName });
       if (isEscape(e)) {
-        console.log('[qs-root] Escape detected, hiding window');
         e.preventDefault();
         e.stopPropagation();
         void hideWindow();
@@ -41,7 +36,6 @@ export function QuickSwitcherRoot() {
     window.addEventListener('keyup', onKey, { capture: true });
     return () => {
       delete (window as any).__hookDiag;
-      console.log('[qs-root] unregistering Escape listeners');
       window.removeEventListener('keydown', onKey, { capture: true });
       document.removeEventListener('keydown', onKey, { capture: true });
       window.removeEventListener('keyup', onKey, { capture: true });

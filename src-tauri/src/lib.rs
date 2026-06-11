@@ -32,7 +32,7 @@ pub fn run() {
         })
         .manage(close_behavior.clone())
         .setup(move |app| {
-            let settings_path: PathBuf = default_settings_path(&app.handle()).unwrap_or_else(|_| {
+            let settings_path: PathBuf = default_settings_path(app.handle()).unwrap_or_else(|_| {
                 std::env::temp_dir().join("toolBench").join("settings.json")
             });
             app.manage(SettingsStore::new(settings_path));

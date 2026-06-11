@@ -95,10 +95,8 @@ export function QuickSwitcher() {
   }, [visible.length]);
 
   const closeWindow = useCallback(async () => {
-    console.log('[qs] closeWindow called');
     try {
       await getCurrentWebviewWindow().hide();
-      console.log('[qs] window hidden');
     } catch (e) {
       console.error('[qs] failed to hide window', e);
     }
@@ -108,13 +106,10 @@ export function QuickSwitcher() {
   // search input (e.g. clicking a cell). Both window/document + keydown/keyup
   // to survive any WebView2 / Tauri event-layer quirk.
   useEffect(() => {
-    console.log('[qs] registering window-level Escape listeners');
     const isEsc = (e: KeyboardEvent) =>
       e.key === 'Escape' || e.key === 'Esc' || e.keyCode === 27;
     const onKey = (e: KeyboardEvent) => {
-      console.log('[qs] window-level key event', { key: e.key, code: e.code, keyCode: e.keyCode, type: e.type, target: (e.target as HTMLElement)?.tagName });
       if (isEsc(e)) {
-        console.log('[qs] window-level Escape detected, hiding');
         e.preventDefault();
         e.stopPropagation();
         void closeWindow();
@@ -124,7 +119,6 @@ export function QuickSwitcher() {
     document.addEventListener('keydown', onKey, { capture: true });
     window.addEventListener('keyup', onKey, { capture: true });
     return () => {
-      console.log('[qs] unregistering window-level Escape listeners');
       window.removeEventListener('keydown', onKey, { capture: true });
       document.removeEventListener('keydown', onKey, { capture: true });
       window.removeEventListener('keyup', onKey, { capture: true });
@@ -188,9 +182,7 @@ export function QuickSwitcher() {
   );
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    console.log('[qs] input onKeyDown', { key: e.key, code: e.code, keyCode: e.keyCode, type: e.type });
     if (e.key === 'Escape' || e.key === 'Esc' || e.keyCode === 27) {
-      console.log('[qs] input Escape detected, hiding');
       e.preventDefault();
       void closeWindow();
       return;

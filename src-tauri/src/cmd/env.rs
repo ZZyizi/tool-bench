@@ -650,7 +650,7 @@ pub fn detect_preset_cmd(kind: PresetKind, dir: String) -> Result<PresetResult, 
             .into());
         }
         let plan = detect_preset_inner(kind, &path)?;
-        let warnings = derive_idempotent_warnings(kind, &plan);
+        let warnings = derive_idempotent_warnings(&plan);
         Ok(PresetResult {
             preset: kind,
             plan,
@@ -665,7 +665,7 @@ pub fn detect_preset_cmd(kind: PresetKind, dir: String) -> Result<PresetResult, 
 }
 
 #[cfg(windows)]
-fn derive_idempotent_warnings(_kind: PresetKind, plan: &PresetPlan) -> Vec<String> {
+fn derive_idempotent_warnings(plan: &PresetPlan) -> Vec<String> {
     // Best-effort idempotency hints. Read current snapshot; flag var/path
     // entries that already match in the target scope. This is informational;
     // the apply step also deduplicates.

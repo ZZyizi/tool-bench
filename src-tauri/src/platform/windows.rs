@@ -10,7 +10,7 @@ impl PortScanner for WindowsPortScanner {
         // admin to see non-system processes. We accept the tradeoff: system
         // services will get names, user processes show as None on unelevated runs.
         let output = Command::new("cmd")
-            .args(&["/C", "chcp 65001 > nul && netstat -anob"])
+            .args(["/C", "chcp 65001 > nul && netstat -anob"])
             .output()
             .map_err(PortError::IoError)?;
         if !output.status.success() {
@@ -24,7 +24,7 @@ impl PortScanner for WindowsPortScanner {
 
     fn kill(&self, pid: u32) -> Result<(), PortError> {
         let output = Command::new("taskkill")
-            .args(&["/PID", &pid.to_string(), "/F"])
+            .args(["/PID", &pid.to_string(), "/F"])
             .output()
             .map_err(PortError::IoError)?;
         if !output.status.success() {

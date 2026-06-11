@@ -84,6 +84,7 @@ const QS_HIDE_MSG: u32 = WM_USER + 1;
 const WS_SYSMENU: isize = 0x00080000;
 
 #[repr(C)]
+#[allow(clippy::upper_case_acronyms)] // mirrors the Win32 SDK name
 struct KBDLLHOOKSTRUCT {
     vk_code: u32,
     scan_code: u32,
@@ -118,6 +119,7 @@ extern "system" {
     fn PostMessageW(hwnd: isize, msg: u32, w_param: usize, l_param: isize) -> i32;
 }
 
+#[allow(clippy::upper_case_acronyms)] // mirrors the Win32 SDK name
 type HOOKPROC = unsafe extern "system" fn(i32, usize, isize) -> isize;
 
 /// 0 means "not installed".

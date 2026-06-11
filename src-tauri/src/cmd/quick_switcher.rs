@@ -89,47 +89,44 @@ fn build_qs_window(app: &AppHandle, show: bool) -> Result<(), String> {
     let pending_hide_for_closure = pending_hide.clone();
 
     window.on_window_event(move |event| {
-        match event {
-            WindowEvent::Focused(false) => {
-                let now = Instant::now();
-                let shown = *last_show_for_closure.lock().unwrap();
-                eprintln!("[qs] Focused(false) at {:?}", now);
-                if now.duration_since(shown) < SHOW_GRACE {
-                    eprintln!("[qs]   → skipped (within SHOW_GRACE)");
-                    return;
-                }
-                *pending_hide_for_closure.lock().unwrap() = Some(now);
-                eprintln!("[qs]   → scheduled hide");
+        if let WindowEvent::Focused(false) = event {
+            let now = Instant::now();
+            let shown = *last_show_for_closure.lock().unwrap();
+            eprintln!("[qs] Focused(false) at {:?}", now);
+            if now.duration_since(shown) < SHOW_GRACE {
+                eprintln!("[qs]   → skipped (within SHOW_GRACE)");
+                return;
+            }
+            *pending_hide_for_closure.lock().unwrap() = Some(now);
+            eprintln!("[qs]   → scheduled hide");
 
-                let app_clone = blur_app.clone();
-                let pending_clone = pending_hide_for_closure.clone();
-                std::thread::spawn(move || {
-                    std::thread::sleep(BLUR_HIDE_DELAY);
-                    let mut pending = pending_clone.lock().unwrap();
-                    let was_pending = pending.take().is_some();
-                    drop(pending);
-                    eprintln!("[qs] timer fired, was_pending={was_pending}");
-                    if was_pending {
-                        if let Some(w) = app_clone.get_webview_window(QS_WINDOW_LABEL) {
-                            // Final sanity check: if the window regained focus
-                            // in the meantime (e.g. user clicked back), leave
-                            // it alone. This replaces the old
-                            // Focused(true)-cancels-hide path, which was
-                            // firing on spurious webview2 focus bounces
-                            // (hover, taskbar preview, etc.) and stalling
-                            // the hide for arbitrary durations.
-                            if w.is_focused().unwrap_or(false) {
-                                eprintln!("[qs]   → window is focused, skip hide");
-                            } else {
-                                let _ = w.hide();
-                                QS_VISIBLE.store(false, Ordering::Relaxed);
-                                eprintln!("[qs]   → window hidden");
-                            }
+            let app_clone = blur_app.clone();
+            let pending_clone = pending_hide_for_closure.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(BLUR_HIDE_DELAY);
+                let mut pending = pending_clone.lock().unwrap();
+                let was_pending = pending.take().is_some();
+                drop(pending);
+                eprintln!("[qs] timer fired, was_pending={was_pending}");
+                if was_pending {
+                    if let Some(w) = app_clone.get_webview_window(QS_WINDOW_LABEL) {
+                        // Final sanity check: if the window regained focus
+                        // in the meantime (e.g. user clicked back), leave
+                        // it alone. This replaces the old
+                        // Focused(true)-cancels-hide path, which was
+                        // firing on spurious webview2 focus bounces
+                        // (hover, taskbar preview, etc.) and stalling
+                        // the hide for arbitrary durations.
+                        if w.is_focused().unwrap_or(false) {
+                            eprintln!("[qs]   → window is focused, skip hide");
+                        } else {
+                            let _ = w.hide();
+                            QS_VISIBLE.store(false, Ordering::Relaxed);
+                            eprintln!("[qs]   → window hidden");
                         }
                     }
-                });
-            }
-            _ => {}
+                }
+            });
         }
     });
 
